@@ -1,0 +1,1331 @@
+<title>Genç Odası Planı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: drafting-table app — library + list on the left, plan and 3D model in the middle, inspector on the right */
+:root {
+  --bg: #e7ebef;
+  --surface: #f7f9fa;
+  --panel: #ffffff;
+  --ink: #17202a;
+  --muted: #5a6876;
+  --line: #d2d9e0;
+  --accent: #2752c9;
+  --accent-soft: #e3eafb;
+  --accent-ink: #ffffff;
+  --sel: #e9a514;
+  --warn: #c8402b;
+  --warn-soft: #fbe9e5;
+  --ok: #2b7d50;
+  --grid: #e2e7ec;
+  --grid-major: #c9d1d9;
+  --wall: #26303b;
+  --floor: #fbfcfd;
+  --font-ui: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #151b22; --panel: #1a2129; --ink: #e5eaef; --muted: #93a1af;
+    --line: #2a343f; --accent: #7397ff; --accent-soft: #1d2840; --accent-ink: #0b1020;
+    --sel: #f4c04e; --warn: #ff7c66; --warn-soft: #3a1f1b; --ok: #5cc58a;
+    --grid: #1c242c; --grid-major: #2b3540; --wall: #c5cfd9; --floor: #121820;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #151b22; --panel: #1a2129; --ink: #e5eaef; --muted: #93a1af;
+  --line: #2a343f; --accent: #7397ff; --accent-soft: #1d2840; --accent-ink: #0b1020;
+  --sel: #f4c04e; --warn: #ff7c66; --warn-soft: #3a1f1b; --ok: #5cc58a;
+  --grid: #1c242c; --grid-major: #2b3540; --wall: #c5cfd9; --floor: #121820;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 300px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "bar bar bar" "side stage insp";
+}
+
+/* top bar */
+.bar {
+  grid-area: bar;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+  padding: 10px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.brand h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.dims-chip { font-size: 12px; color: var(--muted); }
+.bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.sync { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sync::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.sync[data-s="ok"]::before { background: var(--ok); }
+.sync[data-s="saving"]::before { background: var(--sel); }
+.sync[data-s="ro"]::before, .sync[data-s="err"]::before { background: var(--warn); }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 5px 11px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 7px;
+  padding: 5px 11px; cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.danger { color: var(--warn); }
+.btn.danger.armed { background: var(--warn); border-color: var(--warn); color: var(--panel); }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+
+/* side + inspector panels */
+.side, .insp {
+  background: var(--panel); overflow-y: auto; min-height: 0;
+  padding: 14px 16px 24px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.side { grid-area: side; border-right: 1px solid var(--line); }
+.insp { grid-area: insp; border-left: 1px solid var(--line); }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+.side h2.eyebrow { display: flex; justify-content: space-between; }
+
+.lib { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.lib button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--surface);
+  padding: 6px 8px; cursor: pointer; text-align: left; min-width: 0;
+}
+.lib button:hover { border-color: var(--accent); }
+.lib button span:first-child { font-size: 12.5px; font-weight: 500; line-height: 1.25; }
+.lib button span:last-child { font-size: 10.5px; color: var(--muted); }
+
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.list button {
+  width: 100%; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 6px 6px; cursor: pointer; text-align: left;
+}
+.list button:hover { background: var(--surface); }
+.list button[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); }
+.list .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.list .dm { display: block; font-size: 10.5px; color: var(--muted); }
+.chip { font-size: 10.5px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.urun { border-color: var(--ok); color: var(--ok); }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
+.empty { font-size: 13px; color: var(--muted); margin: 0; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 0; }
+.stats div { min-width: 0; }
+.stats dt { font-size: 11px; color: var(--muted); }
+.stats dd { margin: 0; font-family: var(--font-mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.shop { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.shop li { display: flex; justify-content: space-between; gap: 8px; }
+.shop a { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* stage */
+.stage { grid-area: stage; min-width: 0; min-height: 0; padding: 12px; container-type: inline-size; }
+.views { height: 100%; display: grid; gap: 12px; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); }
+.views[data-view="plan"], .views[data-view="3d"] { grid-template-columns: 1fr; }
+.views[data-view="plan"] #pane3d, .views[data-view="3d"] #pane2d { display: none; }
+@container (max-width: 820px) {
+  .views[data-view="both"] { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+}
+.pane {
+  position: relative; min-width: 0; min-height: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.pane-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted);
+}
+.pane-head strong { color: var(--ink); font-weight: 600; }
+.pane-body { position: relative; flex: 1; min-height: 0; }
+#plan { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
+#three { position: absolute; inset: 0; }
+#three canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.pane-msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; color: var(--muted); margin: 0; }
+.hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--muted); pointer-events: none; background: var(--surface); padding: 2px 6px; border-radius: 4px; }
+
+/* plan svg */
+.floor { fill: var(--floor); }
+.g-minor { fill: none; stroke: var(--grid); }
+.g-major { fill: none; stroke: var(--grid-major); }
+.wall { fill: var(--wall); }
+.win-line { stroke: var(--wall); fill: none; }
+.win-fill { fill: var(--surface); }
+.door-leaf { stroke: var(--wall); fill: none; }
+.door-arc { stroke: var(--muted); fill: none; stroke-dasharray: 3 3; }
+.door-zone { fill: var(--accent); opacity: 0.06; }
+.dim { fill: var(--muted); font-family: var(--font-mono); }
+.dim-line { stroke: var(--muted); }
+.item { cursor: grab; }
+.item .body { stroke: var(--ink); stroke-opacity: 0.55; }
+.item.rug .body { fill-opacity: 0.45; stroke-dasharray: 6 4; }
+.item.wallmount .body { stroke-dasharray: 3 2; fill-opacity: 0.7; }
+.item .detail { fill: none; stroke: var(--ink); stroke-opacity: 0.4; }
+.item .detail-fill { fill: #ffffff; fill-opacity: 0.75; stroke: var(--ink); stroke-opacity: 0.35; }
+.item .front { stroke: var(--ink); stroke-opacity: 0.8; }
+.item.warn .body { stroke: var(--warn); stroke-opacity: 1; }
+.item.sel .body { stroke: var(--sel); stroke-opacity: 1; }
+.item.dragging { cursor: grabbing; }
+.lbl { fill: var(--ink); font-family: var(--font-ui); pointer-events: none; paint-order: stroke; stroke: var(--surface); stroke-linejoin: round; }
+.lbl .sub { fill: var(--muted); font-family: var(--font-mono); }
+.measure { stroke: var(--sel); stroke-dasharray: 4 3; }
+.measure-lbl { fill: var(--ink); font-family: var(--font-mono); paint-order: stroke; stroke: var(--surface); stroke-linejoin: round; pointer-events: none; }
+
+/* inspector */
+.insp h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+.insp h3 { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.form { display: flex; flex-direction: column; gap: 12px; }
+.row { display: grid; gap: 8px; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field label, .field .lab { font-size: 11.5px; color: var(--muted); }
+.field input, .field select, .field textarea {
+  width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+}
+.field input[type="number"] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.field input[type="color"] { padding: 2px; height: 32px; cursor: pointer; }
+.field textarea { resize: vertical; min-height: 56px; }
+.field input:disabled, .field select:disabled, .field textarea:disabled { opacity: 0.6; }
+.rot { display: flex; gap: 6px; }
+.rot input { flex: 1; }
+.linkrow { display: flex; gap: 6px; }
+.linkrow input { flex: 1; }
+.linkrow a { align-self: center; font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.warns { list-style: none; margin: 0; padding: 8px 10px; border-radius: 7px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+.op { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.op-head { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 600; }
+.op .field input, .op .field select { background: var(--panel); }
+.howto { font-size: 12.5px; color: var(--muted); margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 8px; font-size: 13px;
+  max-width: calc(100% - 32px); z-index: 10; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 220px minmax(0, 1fr) 270px; }
+}
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { display: flex; flex-direction: column; height: auto; }
+  .bar { order: 0; }
+  .stage { order: 1; height: auto; }
+  .views { height: auto; }
+  .views[data-view="both"] { grid-template-columns: 1fr; grid-template-rows: none; }
+  .pane { height: 62vh; min-height: 320px; }
+  .insp { order: 2; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .side { order: 3; border-right: 0; border-top: 1px solid var(--line); overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <h1>Genç Odası Planı</h1>
+      <span class="dims-chip mono" id="roomChip">330 × 400 cm · tavan 260</span>
+    </div>
+    <div class="bar-actions">
+      <div class="seg" role="group" aria-label="Görünüm">
+        <button type="button" data-view="plan" aria-pressed="false">Plan</button>
+        <button type="button" data-view="3d" aria-pressed="false">3D</button>
+        <button type="button" data-view="both" aria-pressed="true">İkisi</button>
+      </div>
+      <button type="button" class="btn" id="btnRoom">Oda ölçüleri</button>
+      <button type="button" class="btn" id="btnCopy">Planı kopyala</button>
+      <span class="sync" id="sync" data-s="">Bağlanıyor…</span>
+    </div>
+  </header>
+
+  <aside class="side" aria-label="Eşyalar">
+    <section>
+      <h2 class="eyebrow">Eşya ekle</h2>
+      <div class="lib" id="lib"></div>
+    </section>
+    <section>
+      <h2 class="eyebrow"><span>Odadakiler</span><span id="count" class="mono"></span></h2>
+      <ul class="list" id="list"></ul>
+    </section>
+    <section>
+      <h2 class="eyebrow">Özet</h2>
+      <dl class="stats" id="stats"></dl>
+      <ul class="shop" id="shop"></ul>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div class="views" id="views" data-view="both">
+      <section class="pane" id="pane2d" aria-label="Plan görünümü">
+        <div class="pane-head"><strong>Plan · üstten</strong><span class="mono">ızgara 10 / 50 cm</span></div>
+        <div class="pane-body">
+          <svg id="plan" role="img" aria-label="Odanın üstten planı"></svg>
+          <div class="hint">Sürükle: taşı · R: 90° döndür · oklar: 1 cm (Shift: 10 cm)</div>
+        </div>
+      </section>
+      <section class="pane" id="pane3d" aria-label="3D görünüm">
+        <div class="pane-head">
+          <strong>3D</strong>
+          <div class="seg" role="group" aria-label="Kamera">
+            <button type="button" data-cam="genel" aria-pressed="true">Genel</button>
+            <button type="button" data-cam="ust" aria-pressed="false">Üstten</button>
+            <button type="button" data-cam="kapi" aria-pressed="false">Kapıdan</button>
+          </div>
+        </div>
+        <div class="pane-body"><div id="three"></div></div>
+      </section>
+    </div>
+  </main>
+
+  <aside class="insp" id="insp" aria-label="Ayrıntılar"></aside>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+"use strict";
+
+/* ---------- helpers ---------- */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const num = (v, d) => { const n = parseFloat(String(v ?? "").replace(",", ".")); return Number.isFinite(n) ? n : d; };
+const r1 = (v) => Math.round(v * 10) / 10;
+const fmt = (v) => String(r1(v)).replace(".", ",");
+const newId = () => "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const tl = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
+
+/* ---------- catalogue (cm) ---------- */
+const KINDS = {
+  yatak:    { label: "Yatak",          w: 120, d: 200, h: 90,  color: "#7d93c4" },
+  masa:     { label: "Çalışma masası", w: 120, d: 60,  h: 75,  color: "#c9a77c" },
+  sandalye: { label: "Sandalye",       w: 60,  d: 60,  h: 110, color: "#3d4656" },
+  gardirop: { label: "Gardırop",       w: 150, d: 60,  h: 210, color: "#e2dfd8" },
+  kitaplik: { label: "Kitaplık",       w: 80,  d: 30,  h: 180, color: "#d8cbb5" },
+  komodin:  { label: "Komodin",        w: 45,  d: 40,  h: 50,  color: "#d8cbb5" },
+  hali:     { label: "Halı",           w: 160, d: 230, h: 1,   color: "#8fb39a" },
+  koltuk:   { label: "Koltuk / puf",   w: 80,  d: 80,  h: 75,  color: "#d9785e" },
+  tv:       { label: "TV ünitesi",     w: 140, d: 40,  h: 50,  color: "#5b5f66" },
+  raf:      { label: "Duvar rafı",     w: 80,  d: 22,  h: 4,   color: "#d8cbb5", elev: 140 },
+  lamba:    { label: "Lambader",       w: 35,  d: 35,  h: 160, color: "#2b2f36" },
+  petek:    { label: "Kalorifer peteği", w: 100, d: 10, h: 60, color: "#f1f1ee", elev: 12 },
+  kutu:     { label: "Diğer",          w: 50,  d: 50,  h: 50,  color: "#a3a9b3" },
+};
+const WALLS = { ust: "Üst duvar", alt: "Alt duvar", sol: "Sol duvar", sag: "Sağ duvar" };
+const DEFAULT_ROOM = { w: 330, l: 400, h: 260, wallColor: "#e6e4ee", floorColor: "#c49a6c", openings: [] };
+const SAMPLE = {
+  room: { w: 330, l: 400, h: 260, wallColor: "#e6e4ee", floorColor: "#c49a6c", openings: [
+    { id: "o1", type: "kapi", wall: "alt", offset: 20, width: 85, height: 205, hinge: "a" },
+    { id: "o2", type: "pencere", wall: "ust", offset: 150, width: 140, height: 130, sill: 90 },
+  ] },
+  items: [
+    { id: "s1", kind: "yatak", name: "Yatak (örnek)", w: 120, d: 200, h: 90, x: 60, y: 100, rot: 0 },
+    { id: "s2", kind: "komodin", name: "Komodin (örnek)", w: 45, d: 40, h: 50, x: 142.5, y: 20, rot: 0 },
+    { id: "s3", kind: "masa", name: "Masa (örnek)", w: 120, d: 60, h: 75, x: 240, y: 30, rot: 0 },
+    { id: "s4", kind: "sandalye", name: "Sandalye (örnek)", w: 60, d: 60, h: 110, x: 240, y: 95, rot: 180 },
+    { id: "s5", kind: "gardirop", name: "Gardırop (örnek)", w: 150, d: 60, h: 210, x: 300, y: 300, rot: 90 },
+    { id: "s6", kind: "hali", name: "Halı (örnek)", w: 120, d: 170, h: 1, x: 190, y: 225, rot: 0 },
+  ],
+};
+
+/* ---------- state ---------- */
+const state = {
+  room: normRoom(DEFAULT_ROOM),
+  items: new Map(),
+  sel: null,
+  view: "both",
+  mode: "loading", // loading | db | local
+  readOnly: false,
+};
+let db = null;
+let dragId = null;
+
+function normRoom(r) {
+  r = r || {};
+  return {
+    w: clamp(num(r.w, 330), 50, 2000), l: clamp(num(r.l, 400), 50, 2000), h: clamp(num(r.h, 260), 150, 600),
+    wallColor: typeof r.wallColor === "string" ? r.wallColor : DEFAULT_ROOM.wallColor,
+    floorColor: typeof r.floorColor === "string" ? r.floorColor : DEFAULT_ROOM.floorColor,
+    openings: Array.isArray(r.openings) ? r.openings.map(normOpening) : [],
+  };
+}
+function normOpening(o) {
+  const type = o.type === "pencere" ? "pencere" : "kapi";
+  return {
+    id: String(o.id || newId()), type,
+    wall: WALLS[o.wall] ? o.wall : "alt",
+    offset: Math.max(0, num(o.offset, 20)),
+    width: Math.max(10, num(o.width, type === "kapi" ? 85 : 120)),
+    height: Math.max(10, num(o.height, type === "kapi" ? 205 : 130)),
+    sill: Math.max(0, num(o.sill, 90)),
+    hinge: o.hinge === "b" ? "b" : "a",
+  };
+}
+function normItem(id, o) {
+  const k = KINDS[o.kind] ? o.kind : "kutu", K = KINDS[k];
+  return {
+    id, kind: k, name: String(o.name || K.label),
+    w: Math.max(1, num(o.w, K.w)), d: Math.max(1, num(o.d, K.d)), h: Math.max(0.5, num(o.h, K.h)),
+    elev: Math.max(0, num(o.elev, K.elev || 0)),
+    x: num(o.x, 100), y: num(o.y, 100), rot: ((num(o.rot, 0) % 360) + 360) % 360,
+    color: typeof o.color === "string" && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : K.color,
+    status: o.status === "urun" ? "urun" : "taslak",
+    link: String(o.link || ""), price: o.price === "" || o.price == null ? null : num(o.price, null),
+    note: String(o.note || ""), created: num(o.created, 0),
+  };
+}
+const plain = (it) => { const { id, ...rest } = it; return rest; };
+const sortedItems = () => [...state.items.values()].sort((a, b) => a.created - b.created || a.id.localeCompare(b.id));
+
+/* ---------- geometry ---------- */
+function corners(it) {
+  const r = it.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), hw = it.w / 2, hd = it.d / 2;
+  return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([a, b]) => [it.x + a * c - b * s, it.y + a * s + b * c]);
+}
+function bbox(pts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  return { x0, y0, x1, y1 };
+}
+function polyOverlap(A, B) {
+  for (const P of [A, B]) {
+    for (let i = 0; i < P.length; i++) {
+      const [ax, ay] = P[i], [bx, by] = P[(i + 1) % P.length];
+      const nx = -(by - ay), ny = bx - ax;
+      let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+      for (const [x, y] of A) { const p = x * nx + y * ny; a0 = Math.min(a0, p); a1 = Math.max(a1, p); }
+      for (const [x, y] of B) { const p = x * nx + y * ny; b0 = Math.min(b0, p); b1 = Math.max(b1, p); }
+      const len = Math.hypot(nx, ny) || 1;
+      if (a1 <= b0 + 0.5 * len || b1 <= a0 + 0.5 * len) return false;
+    }
+  }
+  return true;
+}
+const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+function wallFrame(wall) {
+  const { w: W, l: L } = state.room;
+  return {
+    ust: { o: [0, 0], a: [1, 0], n: [0, 1], len: W },
+    alt: { o: [0, L], a: [1, 0], n: [0, -1], len: W },
+    sol: { o: [0, 0], a: [0, 1], n: [1, 0], len: L },
+    sag: { o: [W, 0], a: [0, 1], n: [-1, 0], len: L },
+  }[wall];
+}
+function doorZone(op) {
+  const f = wallFrame(op.wall);
+  const p = (t, k) => [f.o[0] + f.a[0] * t + f.n[0] * k, f.o[1] + f.a[1] * t + f.n[1] * k];
+  return [p(op.offset, 0), p(op.offset + op.width, 0), p(op.offset + op.width, op.width), p(op.offset, op.width)];
+}
+function wallSegments(len, ops) {
+  const segs = []; let t = 0;
+  for (const o of [...ops].sort((a, b) => a.offset - b.offset)) {
+    const a = clamp(o.offset, 0, len), b = clamp(o.offset + o.width, 0, len);
+    if (a > t) segs.push([t, a]);
+    t = Math.max(t, b);
+  }
+  if (t < len) segs.push([t, len]);
+  return segs;
+}
+
+function computeWarnings() {
+  const { w: W, l: L } = state.room;
+  const out = new Map();
+  const add = (id, m) => { if (!out.has(id)) out.set(id, []); if (!out.get(id).includes(m)) out.get(id).push(m); };
+  const items = sortedItems();
+  const polys = new Map(items.map((it) => [it.id, corners(it)]));
+  const doors = state.room.openings.filter((o) => o.type === "kapi");
+  for (const it of items) {
+    const b = bbox(polys.get(it.id));
+    if (b.x0 < -0.5 || b.y0 < -0.5 || b.x1 > W + 0.5 || b.y1 > L + 0.5) add(it.id, "Oda sınırının dışına taşıyor");
+    if (it.elev + it.h > state.room.h + 0.5) add(it.id, "Tavandan yüksek");
+  }
+  for (let i = 0; i < items.length; i++) {
+    const A = items[i]; if (A.kind === "hali") continue;
+    for (let j = i + 1; j < items.length; j++) {
+      const B = items[j]; if (B.kind === "hali") continue;
+      const vOverlap = A.elev < B.elev + B.h - 0.5 && B.elev < A.elev + A.h - 0.5;
+      if (!vOverlap) continue;
+      if (polyOverlap(polys.get(A.id), polys.get(B.id))) {
+        add(A.id, `“${B.name}” ile çakışıyor`); add(B.id, `“${A.name}” ile çakışıyor`);
+      }
+    }
+    if (A.elev < 200) for (const d of doors) if (polyOverlap(polys.get(A.id), doorZone(d))) add(A.id, "Kapının açılma alanında");
+  }
+  return out;
+}
+
+/* ---------- storage ---------- */
+const LS_KEY = "genc-odasi-plan-v1";
+const timers = new Map(), chains = new Map(), dirty = new Set();
+let lastErr = false;
+
+function saveSoon(key, delay = 450) {
+  if (state.readOnly) return;
+  dirty.add(key);
+  clearTimeout(timers.get(key));
+  timers.set(key, setTimeout(() => flush(key), delay));
+  setSync();
+}
+function flush(key) {
+  timers.delete(key);
+  const prev = chains.get(key) || Promise.resolve();
+  const p = prev.then(() => write(key));
+  chains.set(key, p);
+  p.finally(() => {
+    if (chains.get(key) === p) { chains.delete(key); if (!timers.has(key)) dirty.delete(key); }
+    setSync();
+  });
+}
+async function write(key) {
+  try {
+    if (state.mode === "db" && db) {
+      if (key === "room") await db.doc("plan/oda").set(JSON.parse(JSON.stringify(state.room)));
+      else {
+        const id = key.slice(5), it = state.items.get(id), ref = db.doc("esyalar/" + id);
+        if (it) await ref.set(JSON.parse(JSON.stringify(plain(it)))); else await ref.delete();
+      }
+    } else if (state.mode === "local") {
+      try { localStorage.setItem(LS_KEY, JSON.stringify({ room: state.room, items: sortedItems() })); } catch (e) { /* storage blocked */ }
+    }
+    lastErr = false;
+  } catch (e) {
+    lastErr = true;
+    if (e && e.code === "invalid_argument") {
+      state.readOnly = true; renderInspector(); toast("Bu planı düzenleme iznin yok, değişiklikler kaydedilmedi.");
+    } else if (e && e.code === "quota_exceeded") {
+      toast("Plan deposu doldu. Birkaç eşyayı silip tekrar dene.");
+    } else {
+      toast("Kaydedilemedi. Bağlantını kontrol edip tekrar dene.");
+    }
+  }
+}
+function setSync() {
+  const el = $("#sync");
+  let s = "", t = "Bağlanıyor…";
+  if (state.mode === "local") { s = dirty.size ? "saving" : "ok"; t = "Bu tarayıcıda kayıtlı"; }
+  else if (state.mode === "db") {
+    if (state.readOnly) { s = "ro"; t = "Yalnızca görüntüleme"; }
+    else if (dirty.size) { s = "saving"; t = "Kaydediliyor…"; }
+    else if (lastErr) { s = "err"; t = "Kaydedilemedi"; }
+    else { s = "ok"; t = "Kaydedildi · ortak plan"; }
+  }
+  el.dataset.s = s; el.textContent = t;
+}
+
+function startLocal() {
+  state.mode = "local";
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch (e) { data = null; }
+  if (!data) data = SAMPLE;
+  state.room = normRoom(data.room);
+  state.items = new Map((data.items || []).map((o, i) => [String(o.id), normItem(String(o.id), { created: i, ...o })]));
+  setSync(); renderAll();
+}
+
+async function startStore() {
+  let user = null;
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch (e) { db = null; }
+  if (!db) { startLocal(); return; }
+  state.mode = "db";
+  try { user = await window.claude.use("user"); } catch (e) { user = null; }
+  if (user && user.can) { try { if ((await user.can("data.write")) === false) state.readOnly = true; } catch (e) { /* unknown */ } }
+  setSync(); renderAll();
+  db.doc("plan/oda").onSnapshot((snap) => {
+    if (dirty.has("room")) return;
+    if (snap.exists) { state.room = normRoom(snap.data()); renderAll(); }
+  }, onDbError);
+  db.collection("esyalar").onSnapshot((snap) => {
+    const next = new Map();
+    for (const d of snap.docs) {
+      const key = "item:" + d.id;
+      if (dirty.has(key) || dragId === d.id) { if (state.items.has(d.id)) next.set(d.id, state.items.get(d.id)); }
+      else next.set(d.id, normItem(d.id, d.data()));
+    }
+    for (const key of dirty) {
+      if (!key.startsWith("item:")) continue;
+      const id = key.slice(5);
+      if (!next.has(id) && state.items.has(id)) next.set(id, state.items.get(id));
+    }
+    state.items = next;
+    if (state.sel && !next.has(state.sel)) state.sel = null;
+    renderAll();
+  }, onDbError);
+}
+function onDbError(e) {
+  if (e && e.code === "revoked") { state.readOnly = true; setSync(); return; }
+  toast("Plan güncellenemedi. Sayfayı yenile.");
+}
+
+/* ---------- mutations ---------- */
+function addItem(kind) {
+  if (state.readOnly) return toast("Bu planı düzenleme iznin yok.");
+  const K = KINDS[kind], id = newId();
+  const it = normItem(id, { kind, name: K.label, x: state.room.w / 2, y: state.room.l / 2, created: Date.now() });
+  state.items.set(id, it); state.sel = id;
+  saveSoon("item:" + id, 0); renderAll();
+}
+function duplicate(id) {
+  const src = state.items.get(id); if (!src) return;
+  const nid = newId();
+  state.items.set(nid, normItem(nid, { ...src, name: src.name + " (kopya)", x: src.x + 20, y: src.y + 20, created: Date.now() }));
+  state.sel = nid; saveSoon("item:" + nid, 0); renderAll();
+}
+function remove(id) {
+  state.items.delete(id); if (state.sel === id) state.sel = null;
+  saveSoon("item:" + id, 0); renderAll();
+}
+function select(id) {
+  if (state.sel === id) return;
+  state.sel = id; renderList(); renderPlan(); renderInspector(); scene3d.mark();
+}
+
+/* ---------- render: header, list, summary ---------- */
+function renderAll() {
+  const { w, l, h } = state.room;
+  $("#roomChip").textContent = `${fmt(w)} × ${fmt(l)} cm · tavan ${fmt(h)}`;
+  state.warn = computeWarnings();
+  renderList(); renderPlan(); renderSummary();
+  if (!document.activeElement || !$("#insp").contains(document.activeElement)) renderInspector();
+  scene3d.mark(true);
+}
+function renderLib() {
+  $("#lib").innerHTML = Object.entries(KINDS).map(([k, K]) =>
+    `<button type="button" data-add="${k}"><span>${esc(K.label)}</span><span class="mono">${K.w}×${K.d}×${K.h}</span></button>`).join("");
+}
+function renderList() {
+  const items = sortedItems();
+  $("#count").textContent = items.length || "";
+  if (!items.length) {
+    $("#list").innerHTML = `<li><p class="empty">${state.mode === "loading" ? "Plan yükleniyor…" : "Henüz eşya yok. Yukarıdan bir eşya ekle ya da aldığın ürünlerin linklerini Claude'a gönder."}</p></li>`;
+    return;
+  }
+  const warn = state.warn || new Map();
+  $("#list").innerHTML = items.map((it) => `<li><button type="button" data-pick="${esc(it.id)}" aria-current="${state.sel === it.id}">
+      <span class="swatch" style="background:${esc(it.color)}"></span>
+      <span style="min-width:0"><span class="nm">${esc(it.name)}</span><span class="dm mono">${fmt(it.w)}×${fmt(it.d)}×${fmt(it.h)}</span></span>
+      ${warn.has(it.id) ? '<span class="chip warn">uyarı</span>' : it.status === "urun" ? '<span class="chip urun">ürün</span>' : '<span class="chip">taslak</span>'}
+    </button></li>`).join("");
+}
+function renderSummary() {
+  const { w, l } = state.room, items = sortedItems();
+  const floorArea = w * l / 10000;
+  const used = items.filter((i) => i.kind !== "hali" && i.elev < 30).reduce((s, i) => s + i.w * i.d, 0) / 10000;
+  const priced = items.filter((i) => i.price != null);
+  const total = priced.reduce((s, i) => s + i.price, 0);
+  const warnCount = (state.warn || new Map()).size;
+  $("#stats").innerHTML = `
+    <div><dt>Taban alanı</dt><dd>${fmt(floorArea)} m²</dd></div>
+    <div><dt>Eşya kaplıyor</dt><dd>${floorArea ? Math.round(used / floorArea * 100) : 0}%</dd></div>
+    <div><dt>Seçilen ürün</dt><dd>${items.filter((i) => i.status === "urun").length} / ${items.length}</dd></div>
+    <div><dt>Toplam fiyat</dt><dd>${priced.length ? tl.format(total) : "—"}</dd></div>
+    ${warnCount ? `<div style="grid-column:1/-1"><dt>Uyarı</dt><dd style="color:var(--warn)">${warnCount} eşyada sorun var</dd></div>` : ""}`;
+  const links = items.filter((i) => i.link);
+  $("#shop").innerHTML = links.map((i) => `<li><a href="${esc(safeUrl(i.link))}" target="_blank" rel="noopener">${esc(i.name)}</a><span class="mono">${i.price != null ? tl.format(i.price) : ""}</span></li>`).join("");
+}
+const safeUrl = (u) => /^https?:\/\//i.test(u) ? u : "https://" + u.replace(/^[a-z]+:/i, "");
+
+/* ---------- render: plan svg ---------- */
+const svg = $("#plan");
+const T = 12;
+let svgScale = 1;
+function renderPlan() {
+  const { w: W, l: L } = state.room;
+  const r = svg.getBoundingClientRect();
+  let M = 46;
+  // margin must fit the wall plus the dimension labels, which are sized in screen pixels
+  if (r.width > 0) for (let i = 0; i < 3; i++) M = T + 36 / Math.min(r.width / (W + 2 * M), r.height / (L + 2 * M));
+  const vbW = W + 2 * M, vbH = L + 2 * M;
+  svg.setAttribute("viewBox", `${-M} ${-M} ${vbW} ${vbH}`);
+  svgScale = r.width > 0 ? Math.min(r.width / vbW, r.height / vbH) : 1.4;
+  const px = (p) => p / svgScale;
+  const fs = px(11.5), fsS = px(10), sw = px(1);
+  const warn = state.warn || new Map();
+  let h = `<defs>
+    <pattern id="g10" width="10" height="10" patternUnits="userSpaceOnUse"><path class="g-minor" stroke-width="${sw}" d="M10 0H0V10"/></pattern>
+    <pattern id="g50" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#g10)"/><path class="g-major" stroke-width="${sw}" d="M50 0H0V50"/></pattern>
+  </defs>
+  <rect class="floor" x="0" y="0" width="${W}" height="${L}"/>
+  <rect x="0" y="0" width="${W}" height="${L}" fill="url(#g50)"/>`;
+
+  // door swing zones
+  for (const o of state.room.openings) if (o.type === "kapi") h += `<polygon class="door-zone" points="${doorZone(o).map((p) => p.join(",")).join(" ")}"/>`;
+
+  // items (rugs first, then by elevation)
+  const items = sortedItems().sort((a, b) => (b.kind === "hali") - (a.kind === "hali") || a.elev - b.elev);
+  for (const it of items) {
+    const cls = ["item", it.kind === "hali" ? "rug" : "", it.elev >= 30 && it.kind !== "petek" ? "wallmount" : "", warn.has(it.id) ? "warn" : "", state.sel === it.id ? "sel" : "", dragId === it.id ? "dragging" : ""].join(" ");
+    const hw = it.w / 2, hd = it.d / 2;
+    const bodySw = state.sel === it.id ? px(2.5) : warn.has(it.id) ? px(2) : px(1.2);
+    h += `<g class="${cls}" data-id="${esc(it.id)}" transform="translate(${it.x} ${it.y}) rotate(${it.rot})">
+      <rect class="body" x="${-hw}" y="${-hd}" width="${it.w}" height="${it.d}" rx="${Math.min(2, hw, hd)}" fill="${esc(it.color)}" stroke-width="${bodySw}"/>
+      ${planDetail(it, sw)}
+      ${it.kind !== "hali" ? `<line class="front" x1="${-hw * 0.35}" y1="${hd - px(3)}" x2="${hw * 0.35}" y2="${hd - px(3)}" stroke-width="${px(2)}"/>` : ""}
+    </g>`;
+  }
+
+  // walls with openings
+  const fr = { ust: [0, -T, 1], alt: [0, L, 1], sol: [-T, 0, 0], sag: [W, 0, 0] };
+  for (const wall of Object.keys(WALLS)) {
+    const f = wallFrame(wall), [ox, oy, horiz] = fr[wall];
+    const ops = state.room.openings.filter((o) => o.wall === wall);
+    for (const [a, b] of wallSegments(f.len, ops)) {
+      h += horiz ? `<rect class="wall" x="${a}" y="${oy}" width="${b - a}" height="${T}"/>` : `<rect class="wall" x="${ox}" y="${a}" width="${T}" height="${b - a}"/>`;
+    }
+    for (const o of ops) {
+      const a = clamp(o.offset, 0, f.len), b = clamp(o.offset + o.width, 0, f.len);
+      if (o.type === "pencere") {
+        if (horiz) h += `<rect class="win-fill" x="${a}" y="${oy}" width="${b - a}" height="${T}"/><path class="win-line" stroke-width="${px(1.2)}" d="M${a} ${oy}H${b}V${oy + T}H${a}ZM${a} ${oy + T / 2}H${b}"/>`;
+        else h += `<rect class="win-fill" x="${ox}" y="${a}" width="${T}" height="${b - a}"/><path class="win-line" stroke-width="${px(1.2)}" d="M${ox} ${a}V${b}H${ox + T}V${a}ZM${ox + T / 2} ${a}V${b}"/>`;
+      } else {
+        const ht = o.hinge === "a" ? a : b, jt = o.hinge === "a" ? b : a, wd = b - a;
+        const H = [f.o[0] + f.a[0] * ht, f.o[1] + f.a[1] * ht], J = [f.o[0] + f.a[0] * jt, f.o[1] + f.a[1] * jt];
+        const E = [H[0] + f.n[0] * wd, H[1] + f.n[1] * wd];
+        const cross = (E[0] - H[0]) * (J[1] - H[1]) - (E[1] - H[1]) * (J[0] - H[0]);
+        h += `<path class="door-arc" stroke-width="${sw}" d="M${E[0]} ${E[1]}A${wd} ${wd} 0 0 ${cross > 0 ? 1 : 0} ${J[0]} ${J[1]}"/>
+              <line class="door-leaf" stroke-width="${px(2.2)}" x1="${H[0]}" y1="${H[1]}" x2="${E[0]}" y2="${E[1]}"/>`;
+      }
+    }
+  }
+  h += `<rect class="wall" x="${-T}" y="${-T}" width="${T}" height="${T}"/><rect class="wall" x="${W}" y="${-T}" width="${T}" height="${T}"/>
+        <rect class="wall" x="${-T}" y="${L}" width="${T}" height="${T}"/><rect class="wall" x="${W}" y="${L}" width="${T}" height="${T}"/>`;
+
+  // room dimensions
+  const dy = -T - px(14), dx = -T - px(14);
+  h += `<line class="dim-line" stroke-width="${sw}" x1="0" y1="${dy}" x2="${W}" y2="${dy}"/>
+    <line class="dim-line" stroke-width="${sw}" x1="0" y1="${dy - px(4)}" x2="0" y2="${dy + px(4)}"/><line class="dim-line" stroke-width="${sw}" x1="${W}" y1="${dy - px(4)}" x2="${W}" y2="${dy + px(4)}"/>
+    <text class="dim" font-size="${fsS}" x="${W / 2}" y="${dy - px(4)}" text-anchor="middle">${fmt(W)} cm</text>
+    <line class="dim-line" stroke-width="${sw}" x1="${dx}" y1="0" x2="${dx}" y2="${L}"/>
+    <line class="dim-line" stroke-width="${sw}" x1="${dx - px(4)}" y1="0" x2="${dx + px(4)}" y2="0"/><line class="dim-line" stroke-width="${sw}" x1="${dx - px(4)}" y1="${L}" x2="${dx + px(4)}" y2="${L}"/>
+    <text class="dim" font-size="${fsS}" x="${dx - px(4)}" y="${L / 2}" text-anchor="middle" transform="rotate(-90 ${dx - px(4)} ${L / 2})">${fmt(L)} cm</text>`;
+
+  // labels (kept upright)
+  for (const it of items) {
+    const b = bbox(corners(it)), bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+    if (bw * svgScale < 26 || bh * svgScale < 14) continue;
+    const maxChars = Math.max(3, Math.floor((bw - px(6)) / (fs * 0.55)));
+    const name = it.name.length > maxChars ? it.name.slice(0, maxChars - 1) + "…" : it.name;
+    const showDims = bh * svgScale > 34;
+    h += `<text class="lbl" font-size="${fs}" stroke-width="${px(3)}" text-anchor="middle" x="${it.x}" y="${it.y + (showDims ? -px(2) : fs * 0.35)}">${esc(name)}${showDims ? `<tspan class="sub" font-size="${fsS}" x="${it.x}" dy="${fs * 1.15}">${fmt(it.w)}×${fmt(it.d)}</tspan>` : ""}</text>`;
+  }
+
+  // distances from selected item to walls
+  const s = state.items.get(state.sel);
+  if (s) {
+    const b = bbox(corners(s)), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    const m = (x1, y1, x2, y2, val, lx, ly) => val > 0.5 ? `<line class="measure" stroke-width="${px(1.3)}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><text class="measure-lbl" font-size="${fsS}" stroke-width="${px(3)}" x="${lx}" y="${ly}" text-anchor="middle">${fmt(val)}</text>` : "";
+    h += m(0, cy, b.x0, cy, b.x0, b.x0 / 2, cy - px(4));
+    h += m(b.x1, cy, W, cy, W - b.x1, (b.x1 + W) / 2, cy - px(4));
+    h += m(cx, 0, cx, b.y0, b.y0, cx + px(4), b.y0 / 2 + px(4)).replace('text-anchor="middle"', 'text-anchor="start"');
+    h += m(cx, b.y1, cx, L, L - b.y1, cx + px(4), (b.y1 + L) / 2 + px(4)).replace('text-anchor="middle"', 'text-anchor="start"');
+  }
+  svg.innerHTML = h;
+}
+function planDetail(it, sw) {
+  const hw = it.w / 2, hd = it.d / 2;
+  switch (it.kind) {
+    case "yatak": {
+      const pw = Math.min(it.w - 16, 70), ph = Math.min(30, it.d * 0.15);
+      return `<rect class="detail-fill" stroke-width="${sw}" x="${-pw / 2}" y="${-hd + 8}" width="${pw}" height="${ph}" rx="4"/>
+              <line class="detail" stroke-width="${sw}" x1="${-hw}" y1="${-hd + it.d * 0.36}" x2="${hw}" y2="${-hd + it.d * 0.36}"/>`;
+    }
+    case "gardirop": case "tv": case "komodin": {
+      const n = Math.max(1, Math.round(it.w / (it.kind === "komodin" ? 100 : 50)));
+      let s = ""; for (let i = 1; i < n; i++) { const x = -hw + it.w * i / n; s += `<line class="detail" stroke-width="${sw}" x1="${x}" y1="${hd - 6}" x2="${x}" y2="${hd}"/>`; }
+      return s + `<line class="detail" stroke-width="${sw}" x1="${-hw}" y1="${hd - 3}" x2="${hw}" y2="${hd - 3}"/>`;
+    }
+    case "kitaplik": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 2}" y1="${-hd + 2}" x2="${hw - 2}" y2="${-hd + 2}"/>`;
+    case "sandalye": return `<rect class="detail" stroke-width="${sw}" x="${-hw * 0.8}" y="${-hd}" width="${it.w * 0.8}" height="${Math.min(8, it.d * 0.15)}" rx="2"/>`;
+    case "lamba": return `<circle class="detail" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.6}"/>`;
+    case "koltuk": return `<rect class="detail" stroke-width="${sw}" x="${-hw}" y="${-hd}" width="${it.w}" height="${it.d * 0.2}"/>`;
+    case "masa": return `<rect class="detail" stroke-width="${sw}" x="${-hw + 3}" y="${-hd + 3}" width="${Math.max(0, it.w - 6)}" height="${Math.max(0, it.d - 6)}"/>`;
+    default: return "";
+  }
+}
+
+/* ---------- plan interaction ---------- */
+function svgPoint(e) {
+  const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+  const m = svg.getScreenCTM(); return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+}
+let drag = null;
+svg.addEventListener("pointerdown", (e) => {
+  const g = e.target.closest("[data-id]");
+  if (!g) { if (state.sel) { state.sel = null; renderList(); renderPlan(); renderInspector(); scene3d.mark(); } return; }
+  const id = g.dataset.id, it = state.items.get(id);
+  select(id);
+  if (state.readOnly || !it) return;
+  const p = svgPoint(e);
+  drag = { id, dx: p.x - it.x, dy: p.y - it.y, moved: false, sx: e.clientX, sy: e.clientY };
+  svg.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+svg.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const it = state.items.get(drag.id); if (!it) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 3) return;
+  drag.moved = true; dragId = drag.id;
+  const p = svgPoint(e);
+  placeSnapped(it, p.x - drag.dx, p.y - drag.dy, !e.altKey);
+  state.warn = computeWarnings();
+  renderPlan(); scene3d.mark(true);
+});
+const endDrag = () => {
+  if (!drag) return;
+  const { id, moved } = drag; drag = null; dragId = null;
+  if (moved) { saveSoon("item:" + id, 0); renderAll(); renderInspector(); }
+};
+svg.addEventListener("pointerup", endDrag);
+svg.addEventListener("pointercancel", endDrag);
+
+function placeSnapped(it, x, y, snap) {
+  const { w: W, l: L } = state.room;
+  if (snap) { x = Math.round(x); y = Math.round(y); }
+  it.x = x; it.y = y;
+  if (!snap) return;
+  const b = bbox(corners(it)), S = 8 / Math.max(svgScale, 0.3) ;
+  const tol = clamp(S, 4, 14);
+  if (Math.abs(b.x0) < tol) it.x -= b.x0; else if (Math.abs(W - b.x1) < tol) it.x += W - b.x1;
+  if (Math.abs(b.y0) < tol) it.y -= b.y0; else if (Math.abs(L - b.y1) < tol) it.y += L - b.y1;
+  // snap edges to other furniture edges
+  const nb = bbox(corners(it));
+  for (const o of state.items.values()) {
+    if (o.id === it.id || o.kind === "hali") continue;
+    const ob = bbox(corners(o));
+    const overlapY = nb.y0 < ob.y1 && ob.y0 < nb.y1, overlapX = nb.x0 < ob.x1 && ob.x0 < nb.x1;
+    if (overlapY) {
+      if (Math.abs(nb.x0 - ob.x1) < tol) { it.x += ob.x1 - nb.x0; break; }
+      if (Math.abs(ob.x0 - nb.x1) < tol) { it.x += ob.x0 - nb.x1; break; }
+    }
+    if (overlapX) {
+      if (Math.abs(nb.y0 - ob.y1) < tol) { it.y += ob.y1 - nb.y0; break; }
+      if (Math.abs(ob.y0 - nb.y1) < tol) { it.y += ob.y0 - nb.y1; break; }
+    }
+  }
+  it.x = r1(it.x); it.y = r1(it.y);
+}
+
+document.addEventListener("keydown", (e) => {
+  const t = e.target;
+  if (t && (t.matches("input, textarea, select") || t.isContentEditable)) return;
+  const it = state.items.get(state.sel); if (!it || state.readOnly) return;
+  const step = e.shiftKey ? 10 : 1;
+  const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+  if (moves[e.key]) { it.x += moves[e.key][0]; it.y += moves[e.key][1]; e.preventDefault(); }
+  else if (e.key === "r" || e.key === "R") { it.rot = (it.rot + (e.shiftKey ? 270 : 90)) % 360; }
+  else if (e.key === "Escape") { select(null); return; }
+  else return;
+  saveSoon("item:" + it.id); renderAll(); renderInspector();
+});
+
+/* ---------- inspector ---------- */
+const insp = $("#insp");
+function field(id, label, value, attrs = "") {
+  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" ${attrs} value="${esc(value)}"></div>`;
+}
+function numField(id, label, value, key, extra = "") {
+  return field(id, label, fmtIn(value), `type="number" inputmode="decimal" step="any" data-k="${key}" ${extra}`);
+}
+const fmtIn = (v) => v == null ? "" : String(r1(v));
+
+function renderInspector() {
+  const it = state.items.get(state.sel);
+  const dis = state.readOnly ? "disabled" : "";
+  if (!it) { renderRoomInspector(dis); return; }
+  const b = bbox(corners(it));
+  const warns = (state.warn || new Map()).get(it.id) || [];
+  insp.innerHTML = `
+    <div>
+      <p class="eyebrow">Seçili eşya · ${esc(KINDS[it.kind].label)}</p>
+      <h2>${esc(it.name)}</h2>
+    </div>
+    ${warns.length ? `<ul class="warns">${warns.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+    <div class="form" data-scope="item">
+      <div class="row">
+        <div class="field" style="grid-column:1/-1"><label for="f-name">Ad</label><input id="f-name" data-k="name" value="${esc(it.name)}" ${dis}></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="f-kind">Tür (3D şekli)</label><select id="f-kind" data-k="kind" ${dis}>${Object.entries(KINDS).map(([k, K]) => `<option value="${k}" ${k === it.kind ? "selected" : ""}>${esc(K.label)}</option>`).join("")}</select></div>
+        <div class="field"><label for="f-color">Renk</label><input id="f-color" type="color" data-k="color" value="${esc(it.color)}" ${dis}></div>
+      </div>
+      <div>
+        <div class="row" style="--cols:3">
+          ${numField("f-w", "Genişlik", it.w, "w", dis + ' min="1"')}
+          ${numField("f-d", "Derinlik", it.d, "d", dis + ' min="1"')}
+          ${numField("f-h", "Yükseklik", it.h, "h", dis + ' min="0.5"')}
+        </div>
+        <p class="note" style="margin-top:4px">Ölçüler cm. Derinlik, eşyanın önünden arkasına; plandaki kalın çizgi önü gösterir.</p>
+      </div>
+      <div class="row">
+        ${numField("f-left", "Sol duvara (cm)", b.x0, "left", dis)}
+        ${numField("f-top", "Üst duvara (cm)", b.y0, "top", dis)}
+      </div>
+      <div class="row">
+        <div class="field"><label for="f-rot">Döndür (°)</label><div class="rot"><input id="f-rot" type="number" inputmode="decimal" step="any" data-k="rot" value="${fmtIn(it.rot)}" ${dis}><button type="button" class="btn small" data-act="rot" aria-label="90 derece döndür" ${dis}>↻ 90</button></div></div>
+        ${numField("f-elev", "Yerden yükseklik", it.elev, "elev", dis + ' min="0"')}
+      </div>
+      <div class="field"><span class="lab">Durum</span>
+        <div class="seg" role="group" aria-label="Durum">
+          <button type="button" data-status="taslak" aria-pressed="${it.status === "taslak"}" ${dis}>Taslak</button>
+          <button type="button" data-status="urun" aria-pressed="${it.status === "urun"}" ${dis}>Gerçek ürün</button>
+        </div>
+      </div>
+      <div class="field"><label for="f-link">Ürün linki</label><div class="linkrow"><input id="f-link" type="url" inputmode="url" placeholder="https://…" data-k="link" value="${esc(it.link)}" ${dis}>${it.link ? `<a href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener">Aç ↗</a>` : ""}</div></div>
+      <div class="row">
+        ${numField("f-price", "Fiyat (₺)", it.price, "price", dis + ' min="0"')}
+        <div></div>
+      </div>
+      <div class="field"><label for="f-note">Not</label><textarea id="f-note" data-k="note" ${dis}>${esc(it.note)}</textarea></div>
+      <div class="actions">
+        <button type="button" class="btn" data-act="dup" ${dis}>Çoğalt</button>
+        <button type="button" class="btn danger" data-act="del" ${dis}>Sil</button>
+        <button type="button" class="btn" data-act="close" style="margin-left:auto">Kapat</button>
+      </div>
+    </div>`;
+}
+
+function renderRoomInspector(dis) {
+  const R = state.room;
+  insp.innerHTML = `
+    <div>
+      <p class="eyebrow">Oda</p>
+      <h2>Oda ölçüleri</h2>
+      <p class="note" style="margin-top:4px">Duvardan duvara iç ölçüleri cm olarak gir. Üst, alt, sol ve sağ, plandaki çizime göre.</p>
+    </div>
+    <div class="form" data-scope="room">
+      <div class="row" style="--cols:3">
+        ${numField("r-w", "Genişlik", R.w, "w", dis + ' min="50"')}
+        ${numField("r-l", "Uzunluk", R.l, "l", dis + ' min="50"')}
+        ${numField("r-h", "Tavan", R.h, "h", dis + ' min="150"')}
+      </div>
+      <div class="row">
+        <div class="field"><label for="r-wall">Duvar rengi</label><input id="r-wall" type="color" data-k="wallColor" value="${esc(R.wallColor)}" ${dis}></div>
+        <div class="field"><label for="r-floor">Zemin rengi</label><input id="r-floor" type="color" data-k="floorColor" value="${esc(R.floorColor)}" ${dis}></div>
+      </div>
+      <h3>Kapı ve pencereler</h3>
+      ${R.openings.length ? "" : `<p class="note">Henüz kapı ya da pencere yok.</p>`}
+      ${R.openings.map((o, i) => `
+        <div class="op" data-oi="${i}">
+          <div class="op-head"><span>${o.type === "kapi" ? "Kapı" : "Pencere"} · ${WALLS[o.wall]}</span><button type="button" class="btn small danger" data-act="opdel" data-oi="${i}" ${dis}>Kaldır</button></div>
+          <div class="row">
+            <div class="field"><label for="o${i}-type">Tür</label><select id="o${i}-type" data-ok="type" ${dis}><option value="kapi" ${o.type === "kapi" ? "selected" : ""}>Kapı</option><option value="pencere" ${o.type === "pencere" ? "selected" : ""}>Pencere</option></select></div>
+            <div class="field"><label for="o${i}-wall">Duvar</label><select id="o${i}-wall" data-ok="wall" ${dis}>${Object.entries(WALLS).map(([k, v]) => `<option value="${k}" ${k === o.wall ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+          </div>
+          <div class="row">
+            ${field(`o${i}-off`, o.wall === "sol" || o.wall === "sag" ? "Üst köşeden (cm)" : "Sol köşeden (cm)", fmtIn(o.offset), `type="number" inputmode="decimal" step="any" data-ok="offset" ${dis}`)}
+            ${field(`o${i}-wid`, "Genişlik (cm)", fmtIn(o.width), `type="number" inputmode="decimal" step="any" data-ok="width" ${dis}`)}
+          </div>
+          <div class="row">
+            ${field(`o${i}-hei`, "Yükseklik (cm)", fmtIn(o.height), `type="number" inputmode="decimal" step="any" data-ok="height" ${dis}`)}
+            ${o.type === "pencere"
+              ? field(`o${i}-sill`, "Yerden (parapet)", fmtIn(o.sill), `type="number" inputmode="decimal" step="any" data-ok="sill" ${dis}`)
+              : `<div class="field"><label for="o${i}-hinge">Menteşe</label><select id="o${i}-hinge" data-ok="hinge" ${dis}><option value="a" ${o.hinge === "a" ? "selected" : ""}>${o.wall === "sol" || o.wall === "sag" ? "Üst tarafta" : "Sol tarafta"}</option><option value="b" ${o.hinge === "b" ? "selected" : ""}>${o.wall === "sol" || o.wall === "sag" ? "Alt tarafta" : "Sağ tarafta"}</option></select></div>`}
+          </div>
+        </div>`).join("")}
+      <div class="actions">
+        <button type="button" class="btn" data-act="addop" data-type="kapi" ${dis}>+ Kapı</button>
+        <button type="button" class="btn" data-act="addop" data-type="pencere" ${dis}>+ Pencere</button>
+      </div>
+    </div>
+    <div>
+      <p class="eyebrow">Nasıl ilerleriz</p>
+      <ol class="howto">
+        <li>Odanın ölçülerini, kapı ve pencereleri gir.</li>
+        <li>Soldan eşya ekle, planda sürükleyerek yerleştir.</li>
+        <li>Almak istediğin ürünlerin linklerini Claude'a gönder; gerçek ölçüleriyle bu plana eklenir.</li>
+        <li>3D görünümde gez, beğenmediğini değiştir.</li>
+      </ol>
+    </div>`;
+}
+
+function applyItemField(it, k, v) {
+  switch (k) {
+    case "name": it.name = v || KINDS[it.kind].label; break;
+    case "kind": it.kind = KINDS[v] ? v : it.kind; break;
+    case "color": it.color = v; break;
+    case "link": it.link = v.trim(); break;
+    case "note": it.note = v; break;
+    case "price": it.price = v === "" ? null : Math.max(0, num(v, 0)); break;
+    case "w": case "d": it[k] = Math.max(1, num(v, it[k])); break;
+    case "h": it.h = Math.max(0.5, num(v, it.h)); break;
+    case "elev": it.elev = Math.max(0, num(v, it.elev)); break;
+    case "rot": it.rot = ((num(v, it.rot) % 360) + 360) % 360; break;
+    case "left": { const b = bbox(corners(it)); it.x += num(v, b.x0) - b.x0; break; }
+    case "top": { const b = bbox(corners(it)); it.y += num(v, b.y0) - b.y0; break; }
+  }
+}
+insp.addEventListener("input", (e) => {
+  const t = e.target; if (state.readOnly) return;
+  const scope = t.closest("[data-scope]")?.dataset.scope;
+  if (scope === "item" && t.dataset.k) {
+    const it = state.items.get(state.sel); if (!it) return;
+    if ((t.type === "number") && t.value === "" && t.dataset.k !== "price") return;
+    applyItemField(it, t.dataset.k, t.value);
+    if (t.dataset.k === "name") insp.querySelector("h2").textContent = it.name;
+    saveSoon("item:" + it.id); state.warn = computeWarnings(); renderList(); renderPlan(); renderSummary(); scene3d.mark(true);
+  } else if (scope === "room") {
+    const R = state.room;
+    if (t.dataset.k) {
+      if (t.type === "number") { if (t.value === "") return; const lim = { w: 50, l: 50, h: 150 }[t.dataset.k]; R[t.dataset.k] = Math.max(lim, num(t.value, R[t.dataset.k])); }
+      else R[t.dataset.k] = t.value;
+    } else if (t.dataset.ok) {
+      const o = R.openings[+t.closest("[data-oi]").dataset.oi]; if (!o) return;
+      const k = t.dataset.ok;
+      if (t.type === "number") { if (t.value === "") return; o[k] = Math.max(k === "width" || k === "height" ? 10 : 0, num(t.value, o[k])); }
+      else o[k] = t.value;
+    } else return;
+    saveSoon("room"); renderAll();
+  }
+});
+insp.addEventListener("change", (e) => {
+  const t = e.target;
+  // refresh derived fields (positions after rotation, labels after wall/type changes)
+  if (t.dataset.k === "rot" || t.dataset.k === "w" || t.dataset.k === "d" || t.dataset.k === "kind" || t.dataset.ok === "type" || t.dataset.ok === "wall") {
+    t.blur(); renderInspector();
+  }
+});
+let delArmed = null;
+insp.addEventListener("click", (e) => {
+  const btn = e.target.closest("button"); if (!btn || btn.disabled) return;
+  const it = state.items.get(state.sel);
+  if (btn.dataset.status && it) { it.status = btn.dataset.status; saveSoon("item:" + it.id, 0); renderAll(); renderInspector(); return; }
+  switch (btn.dataset.act) {
+    case "rot": if (it) { it.rot = (it.rot + 90) % 360; saveSoon("item:" + it.id); renderAll(); renderInspector(); } break;
+    case "dup": if (it) duplicate(it.id); renderInspector(); break;
+    case "del":
+      if (!it) break;
+      if (delArmed === it.id) { delArmed = null; remove(it.id); renderInspector(); toast(`“${it.name}” silindi.`); }
+      else { delArmed = it.id; btn.classList.add("armed"); btn.textContent = "Silmek için tekrar bas"; setTimeout(() => { if (delArmed === it.id) { delArmed = null; btn.classList.remove("armed"); btn.textContent = "Sil"; } }, 3000); }
+      break;
+    case "close": select(null); break;
+    case "addop": {
+      const type = btn.dataset.type;
+      state.room.openings.push(normOpening({ id: newId(), type, wall: type === "kapi" ? "alt" : "ust", offset: 20 }));
+      saveSoon("room", 0); renderAll(); renderInspector(); break;
+    }
+    case "opdel": state.room.openings.splice(+btn.dataset.oi, 1); saveSoon("room", 0); renderAll(); renderInspector(); break;
+  }
+});
+
+/* ---------- side + bar events ---------- */
+$("#lib").addEventListener("click", (e) => { const b = e.target.closest("[data-add]"); if (b) addItem(b.dataset.add); });
+$("#list").addEventListener("click", (e) => { const b = e.target.closest("[data-pick]"); if (b) select(b.dataset.pick); });
+$("#btnRoom").addEventListener("click", () => { state.sel = null; renderList(); renderPlan(); renderInspector(); scene3d.mark(); insp.scrollTop = 0; });
+document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+  state.view = b.dataset.view; $("#views").dataset.view = state.view;
+  document.querySelectorAll("[data-view]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  try { localStorage.setItem(LS_KEY + "-view", state.view); } catch (err) { /* ignore */ }
+  requestAnimationFrame(() => { renderPlan(); scene3d.resize(); });
+}));
+$("#btnCopy").addEventListener("click", () => {
+  const data = JSON.stringify({ oda: state.room, esyalar: sortedItems() }, null, 1);
+  const done = () => toast("Plan panoya kopyalandı. Sohbete yapıştırabilirsin.");
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(data).then(done, () => toast("Kopyalanamadı. Tarayıcın panoya erişime izin vermiyor."));
+  else toast("Kopyalanamadı. Tarayıcın panoya erişime izin vermiyor.");
+});
+let toastT = null;
+function toast(msg) { const el = $("#toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 3200); }
+
+/* ---------- 3D ---------- */
+const scene3d = (() => {
+  const host = $("#three");
+  if (!window.THREE || !THREE.OrbitControls) {
+    host.innerHTML = '<p class="pane-msg">3D görünüm yüklenemedi. Sayfayı yenileyip tekrar dene.</p>';
+    return { mark() {}, resize() {}, cam() {} };
+  }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+  catch (e) { host.innerHTML = '<p class="pane-msg">Bu cihaz 3D görünümü desteklemiyor (WebGL kapalı).</p>'; return { mark() {}, resize() {}, cam() {} }; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 100);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.09;
+  controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 0.4; controls.maxDistance = 25;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a66, 0.72));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.62);
+  sun.position.set(3, 7, 2.5); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 0.5, far: 25 });
+  sun.shadow.bias = -0.0006; scene.add(sun);
+
+  const roomG = new THREE.Group(), itemsG = new THREE.Group(); scene.add(roomG, itemsG);
+  let walls = {}, selHelper = null, roomKey = "", dirtyItems = true, dirtyRoom = true, camMode = "genel", needFrame = true;
+  const mats = new Map();
+  const mat = (color, o = {}) => {
+    const key = color + JSON.stringify(o);
+    if (!mats.has(key)) mats.set(key, new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, ...o }));
+    return mats.get(key);
+  };
+  const shade = (hex, f) => { const c = new THREE.Color(hex); return "#" + (f < 0 ? c.multiplyScalar(1 + f) : c.lerp(new THREE.Color("#ffffff"), f)).getHexString(); };
+  const S = (v) => v / 100;
+  const bgColor = () => getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() || "#f7f9fa";
+
+  function bx(g, w, h, d, color, x, y, z, o) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w, 0.002), Math.max(h, 0.002), Math.max(d, 0.002)), typeof color === "string" ? mat(color, o) : color);
+    m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+  }
+  function cy(g, rt, rb, h, color, x, y, z, o) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 20), mat(color, o));
+    m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+  }
+
+  function floorTexture(color) {
+    const cv = document.createElement("canvas"); cv.width = 512; cv.height = 512;
+    const x = cv.getContext("2d"), base = new THREE.Color(color);
+    const rows = 8, rh = 512 / rows;
+    for (let r = 0; r < rows; r++) {
+      let cx = -((r * 137) % 300);
+      while (cx < 512) {
+        const len = 260 + ((r * 53 + cx * 7) % 140);
+        const v = 0.9 + (((r * 31 + Math.abs(cx) * 17) % 23) / 23) * 0.18;
+        const c = base.clone().multiplyScalar(v);
+        x.fillStyle = "#" + c.getHexString(); x.fillRect(cx, r * rh, len, rh);
+        x.fillStyle = "rgba(0,0,0,.18)"; x.fillRect(cx, r * rh, 2, rh);
+        cx += len;
+      }
+      x.fillStyle = "rgba(0,0,0,.22)"; x.fillRect(0, r * rh, 512, 1.5);
+    }
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+    return t;
+  }
+  function disposeGroup(g) {
+    g.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
+    while (g.children.length) g.remove(g.children[0]);
+  }
+
+  function buildRoom() {
+    disposeGroup(roomG); walls = {};
+    const R = state.room, W = S(R.w), L = S(R.l), H = S(R.h), t = 0.1;
+    const tex = floorTexture(R.floorColor); tex.repeat.set(W / 1.6, L / 1.6);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; roomG.add(floor);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(W + 2 * t, 0.06, L + 2 * t), mat("#9aa3ad"));
+    base.position.y = -0.031; roomG.add(base);
+    const wm = mat(R.wallColor), trim = shade("#ffffff", 0);
+    const defs = {
+      ust: { len: R.w, place: (g, a, b, y0, y1) => bx(g, S(b - a), S(y1 - y0), t, wm, -W / 2 + S((a + b) / 2), S(y0), -L / 2 - t / 2) },
+      alt: { len: R.w, place: (g, a, b, y0, y1) => bx(g, S(b - a), S(y1 - y0), t, wm, -W / 2 + S((a + b) / 2), S(y0), L / 2 + t / 2) },
+      sol: { len: R.l, place: (g, a, b, y0, y1) => bx(g, t, S(y1 - y0), S(b - a), wm, -W / 2 - t / 2, S(y0), -L / 2 + S((a + b) / 2)) },
+      sag: { len: R.l, place: (g, a, b, y0, y1) => bx(g, t, S(y1 - y0), S(b - a), wm, W / 2 + t / 2, S(y0), -L / 2 + S((a + b) / 2)) },
+    };
+    for (const [k, def] of Object.entries(defs)) {
+      const g = new THREE.Group(); g.name = k; roomG.add(g); walls[k] = g;
+      const ops = R.openings.filter((o) => o.wall === k);
+      const ext = k === "ust" || k === "alt" ? 10 : 0; // corners
+      for (const [a, b] of wallSegments(def.len, ops)) def.place(g, a === 0 ? a - ext : a, b === def.len ? b + ext : b, 0, R.h);
+      for (const o of ops) {
+        const a = clamp(o.offset, 0, def.len), b = clamp(o.offset + o.width, 0, def.len); if (b - a < 1) continue;
+        if (o.type === "kapi") {
+          const top = Math.min(o.height, R.h);
+          if (top < R.h) def.place(g, a, b, top, R.h);
+          const leaf = def.place(g, a + 2, b - 2, 0, top - 1); leaf.material = mat("#f3f1ec");
+          leaf.scale[k === "ust" || k === "alt" ? "z" : "x"] = 0.4;
+        } else {
+          const s0 = Math.min(o.sill, R.h), s1 = Math.min(o.sill + o.height, R.h);
+          if (s0 > 0) def.place(g, a, b, 0, s0);
+          if (s1 < R.h) def.place(g, a, b, s1, R.h);
+          const glass = def.place(g, a, b, s0, s1);
+          glass.material = mat("#bfe0f5", { transparent: true, opacity: 0.28, roughness: 0.1 }); glass.castShadow = false;
+          glass.scale[k === "ust" || k === "alt" ? "z" : "x"] = 0.15;
+          const sill = def.place(g, a - 4, b + 4, s0 - 3, s0); sill.material = mat(trim);
+          sill.scale[k === "ust" || k === "alt" ? "z" : "x"] = 1.5;
+        }
+      }
+    }
+    sun.shadow.camera.left = -Math.max(W, L); sun.shadow.camera.right = Math.max(W, L);
+    sun.shadow.camera.top = Math.max(W, L); sun.shadow.camera.bottom = -Math.max(W, L); sun.shadow.camera.updateProjectionMatrix();
+  }
+
+  function buildItem(it) {
+    const g = new THREE.Group(), W = S(it.w), D = S(it.d), H = S(it.h), c = it.color, dark = shade(c, -0.35);
+    switch (it.kind) {
+      case "yatak": {
+        const top = Math.min(0.5, H), baseH = Math.max(top - 0.2, 0.06);
+        bx(g, W, baseH, D, shade(c, -0.25), 0, 0, 0);
+        bx(g, W - 0.03, top - baseH, D - 0.03, "#f2f0ea", 0, baseH, 0);
+        bx(g, W - 0.01, 0.05, D * 0.64, c, 0, top - 0.025, D / 2 - D * 0.32);
+        const pw = W > 1.3 ? (W - 0.2) / 2 : Math.min(W - 0.12, 0.65);
+        const n = W > 1.3 ? 2 : 1;
+        for (let i = 0; i < n; i++) bx(g, pw, 0.12, 0.38, "#ffffff", n === 1 ? 0 : (i ? 1 : -1) * (pw / 2 + 0.03), top, -D / 2 + 0.28);
+        if (H > top + 0.05) bx(g, W, H, 0.05, shade(c, -0.25), 0, 0, -D / 2 + 0.025);
+        break;
+      }
+      case "masa": {
+        const tt = Math.min(0.03, H);
+        bx(g, W, tt, D, c, 0, H - tt, 0);
+        const lw = 0.045, legH = H - tt;
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, lw, legH, lw, dark, sx * (W / 2 - lw / 2 - 0.02), 0, sz * (D / 2 - lw / 2 - 0.02));
+        if (W > 0.9 && H > 0.5) bx(g, 0.4, 0.14, D - 0.08, shade(c, -0.08), W / 2 - 0.26, H - tt - 0.14, 0);
+        break;
+      }
+      case "sandalye": {
+        const seatY = Math.min(0.47, H * 0.5), r = Math.min(W, D) * 0.42;
+        for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, leg = bx(g, 0.04, 0.03, r, "#2a2d33", Math.sin(a) * r / 2, 0.03, Math.cos(a) * r / 2); leg.rotation.y = a; }
+        cy(g, 0.025, 0.025, Math.max(seatY - 0.1, 0.02), "#6b7078", 0, 0.05, 0, { metalness: 0.5, roughness: 0.4 });
+        bx(g, W * 0.85, 0.07, D * 0.85, c, 0, seatY - 0.07, 0.02);
+        if (H > seatY + 0.08) bx(g, W * 0.8, H - seatY, 0.07, c, 0, seatY, -D * 0.38);
+        break;
+      }
+      case "gardirop": case "tv": case "komodin": {
+        bx(g, W, H, D - 0.01, c, 0, 0, -0.005);
+        const n = it.kind === "komodin" ? Math.max(1, Math.round(H / 0.18)) : Math.max(1, Math.round(W / 0.5));
+        if (it.kind === "komodin") {
+          for (let i = 1; i < n; i++) bx(g, W - 0.02, 0.006, 0.004, dark, 0, H * i / n, D / 2);
+          for (let i = 0; i < n; i++) bx(g, Math.min(0.12, W * 0.3), 0.015, 0.02, "#8a8f96", 0, H * (i + 0.5) / n - 0.008, D / 2 + 0.01, { metalness: 0.6, roughness: 0.35 });
+        } else {
+          for (let i = 1; i < n; i++) bx(g, 0.006, H - 0.04, 0.004, dark, -W / 2 + W * i / n, 0.02, D / 2);
+          for (let i = 0; i < n; i++) {
+            const hx = -W / 2 + W * (i + (i % 2 ? 0.12 : 0.88)) / n;
+            bx(g, 0.015, Math.min(0.18, H * 0.25), 0.02, "#8a8f96", hx, it.kind === "tv" ? H * 0.6 : H * 0.48, D / 2 + 0.01, { metalness: 0.6, roughness: 0.35 });
+          }
+        }
+        break;
+      }
+      case "kitaplik": {
+        const th = 0.02;
+        bx(g, th, H, D, c, -W / 2 + th / 2, 0, 0); bx(g, th, H, D, c, W / 2 - th / 2, 0, 0);
+        bx(g, W, th, D, c, 0, 0, 0); bx(g, W, th, D, c, 0, H - th, 0);
+        bx(g, W - 2 * th, H - 2 * th, 0.008, shade(c, -0.12), 0, th, -D / 2 + 0.004);
+        const n = Math.max(1, Math.floor(H / 0.36));
+        const books = ["#c0504d", "#4f81bd", "#9bbb59", "#f2c14e", "#8064a2", "#4bacc6", "#e4796b"];
+        for (let i = 0; i < n; i++) {
+          const y = th + (H - 2 * th) * i / n;
+          if (i > 0) bx(g, W - 2 * th, th, D - 0.01, c, 0, y, 0);
+          let bxp = -W / 2 + th + 0.01, k = i * 3;
+          const lim = W / 2 - th - 0.02 - (i % 2 ? W * 0.3 : 0);
+          while (bxp < lim) {
+            const bw = 0.025 + ((k * 7) % 4) * 0.006, bh = Math.min(0.2 + ((k * 5) % 5) * 0.025, (H - 2 * th) / n - 0.04);
+            if (bh <= 0.03 || D < 0.12) break;
+            bx(g, bw, bh, Math.min(D - 0.04, 0.2), books[k % books.length], bxp + bw / 2, y + th, 0.0);
+            bxp += bw + 0.003; k++;
+          }
+        }
+        break;
+      }
+      case "hali": { const m = bx(g, W, Math.max(H, 0.008), D, c); m.castShadow = false; break; }
+      case "koltuk": {
+        const arm = W > 0.9 ? 0.14 : 0;
+        bx(g, W, H * 0.45, D, shade(c, -0.15), 0, 0, 0);
+        bx(g, W - 2 * arm - 0.02, 0.12, D - 0.22, c, 0, H * 0.45, 0.09);
+        if (H > 0.55) bx(g, W - 2 * arm, H - H * 0.45, 0.2, c, 0, H * 0.45, -D / 2 + 0.1);
+        if (arm) for (const sx of [-1, 1]) bx(g, arm, H * 0.65 - H * 0.45, D, shade(c, -0.08), sx * (W / 2 - arm / 2), H * 0.45, 0);
+        break;
+      }
+      case "lamba": {
+        const r = Math.min(W, D) / 2;
+        cy(g, r * 0.7, r * 0.8, 0.03, "#2b2f36", 0, 0, 0, { metalness: 0.4, roughness: 0.4 });
+        cy(g, 0.012, 0.012, Math.max(H - 0.25, 0.05), c, 0, 0.03, 0, { metalness: 0.4, roughness: 0.4 });
+        cy(g, r * 0.55, r, Math.min(0.25, H * 0.3), "#f4eedc", 0, H - Math.min(0.25, H * 0.3), 0, { emissive: "#6b5a2e", emissiveIntensity: 0.6 });
+        break;
+      }
+      case "petek": {
+        const n = Math.max(2, Math.min(60, Math.round(W / 0.05)));
+        for (let i = 0; i < n; i++) bx(g, W / n - 0.008, H, D, c, -W / 2 + W * (i + 0.5) / n, 0, 0);
+        break;
+      }
+      default: bx(g, W, H, D, c, 0, 0, 0);
+    }
+    g.position.set(S(it.x - state.room.w / 2), S(it.elev), S(it.y - state.room.l / 2));
+    g.rotation.y = -it.rot * Math.PI / 180;
+    g.userData.id = it.id;
+    g.traverse((o) => { o.userData.id = it.id; });
+    return g;
+  }
+
+  function buildItems() {
+    disposeGroup(itemsG);
+    for (const it of state.items.values()) itemsG.add(buildItem(it));
+    if (selHelper) { scene.remove(selHelper); selHelper.geometry.dispose(); selHelper = null; }
+    const sg = itemsG.children.find((g) => g.userData.id === state.sel);
+    if (sg) { selHelper = new THREE.BoxHelper(sg, new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--sel").trim() || "#e9a514")); scene.add(selHelper); }
+  }
+
+  function cam(mode) {
+    camMode = mode || camMode;
+    const R = state.room, W = S(R.w), L = S(R.l), H = S(R.h), span = Math.max(W, L);
+    if (camMode === "ust") { camera.position.set(0, span * 1.9 + H, 0.001); controls.target.set(0, 0, 0); }
+    else if (camMode === "kapi") {
+      const d = R.openings.find((o) => o.type === "kapi") || { wall: "alt", offset: R.w / 2 - 40, width: 80 };
+      const f = wallFrame(d.wall), mid = d.offset + d.width / 2;
+      const px = f.o[0] + f.a[0] * mid + f.n[0] * 25, py = f.o[1] + f.a[1] * mid + f.n[1] * 25;
+      camera.position.set(S(px - R.w / 2), 1.6, S(py - R.l / 2));
+      controls.target.set(S(px + f.n[0] * 200 - R.w / 2) * 0.5, 0.9, S(py + f.n[1] * 200 - R.l / 2) * 0.5);
+    } else { camera.position.set(W * 0.85 + 0.6, H + span * 0.9, L * 0.95 + 0.9); controls.target.set(0, 0.6, 0); }
+    controls.update(); needFrame = true;
+    document.querySelectorAll("[data-cam]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.cam === camMode));
+  }
+
+  function resize() {
+    const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); needFrame = true;
+  }
+  new ResizeObserver(resize).observe(host);
+
+  function loop() {
+    requestAnimationFrame(loop);
+    if (!host.clientWidth) return;
+    if (dirtyRoom) {
+      const key = JSON.stringify(state.room);
+      if (key !== roomKey) { const first = !roomKey; roomKey = key; buildRoom(); if (first) cam("genel"); }
+      dirtyRoom = false; needFrame = true;
+    }
+    if (dirtyItems) { buildItems(); dirtyItems = false; needFrame = true; }
+    const moved = controls.update();
+    const R = state.room, hw = S(R.w) / 2, hl = S(R.l) / 2, p = camera.position;
+    if (walls.ust) {
+      walls.ust.visible = p.z > -hl - 0.05; walls.alt.visible = p.z < hl + 0.05;
+      walls.sol.visible = p.x > -hw - 0.05; walls.sag.visible = p.x < hw + 0.05;
+    }
+    if (moved || needFrame) { scene.background = new THREE.Color(bgColor()); renderer.render(scene, camera); needFrame = false; }
+  }
+  controls.addEventListener("change", () => { needFrame = true; });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { needFrame = true; dirtyItems = true; });
+
+  // click to select
+  const ray = new THREE.Raycaster(); let down = null;
+  renderer.domElement.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener("pointerup", (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) { down = null; return; }
+    down = null;
+    const r = renderer.domElement.getBoundingClientRect();
+    ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
+    const hit = ray.intersectObjects(itemsG.children, true)[0];
+    select(hit ? hit.object.userData.id : null);
+  });
+  document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => cam(b.dataset.cam)));
+  requestAnimationFrame(loop);
+  return {
+    mark(all) { dirtyItems = true; if (all) dirtyRoom = true; needFrame = true; },
+    resize, cam,
+  };
+})();
+
+/* ---------- boot ---------- */
+try { const v = localStorage.getItem(LS_KEY + "-view"); if (v && ["plan", "3d", "both"].includes(v)) { state.view = v; $("#views").dataset.view = v; document.querySelectorAll("[data-view]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.view === v)); } } catch (e) { /* ignore */ }
+renderLib();
+renderAll();
+new ResizeObserver(() => renderPlan()).observe(svg);
+startStore();
+})();
+</script>
