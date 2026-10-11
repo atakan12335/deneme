@@ -419,6 +419,7 @@ function normItem(id, o) {
     scene: typeof o.scene === "string" && o.scene ? o.scene : "mevcut",
     link: String(o.link || ""), price: o.price === "" || o.price == null ? null : num(o.price, null),
     note: String(o.note || ""), created: num(o.created, 0),
+    ...(o.stand === "tripod" ? { stand: "tripod" } : {}),
   };
 }
 const plain = (it) => { const { id, ...rest } = it; return rest; };
@@ -897,7 +898,13 @@ function planDetail(it, sw) {
     case "kitaplik": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 2}" y1="${-hd + 2}" x2="${hw - 2}" y2="${-hd + 2}"/>`;
     case "sandalye": return `<rect class="detail" stroke-width="${sw}" x="${-hw * 0.8}" y="${-hd}" width="${it.w * 0.8}" height="${Math.min(8, it.d * 0.15)}" rx="2"/>`;
     case "lamba": return `<circle class="detail" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.6}"/>`;
-    case "monitor": return `<rect class="detail-fill" stroke-width="${sw}" x="${-hw}" y="${-hd + 3}" width="${it.w}" height="${Math.min(6, it.d * 0.3)}"/>
+    case "monitor": if (it.stand === "tripod") {
+      // two long front legs from a hub at the back, short rear foot
+      const hz = -hd + 5, tx = Math.min(hw * 0.88, 27);
+      return `<rect class="detail-fill" stroke-width="${sw}" x="${-hw}" y="${-hd + 5}" width="${it.w}" height="${Math.min(5, it.d * 0.2)}"/>
+      <path class="detail" stroke-width="${sw * 1.6}" fill="none" d="M${-tx} ${hd - 1} L0 ${hz} L${tx} ${hd - 1} M0 ${hz} L0 ${-hd}"/>`;
+    }
+    return `<rect class="detail-fill" stroke-width="${sw}" x="${-hw}" y="${-hd + 3}" width="${it.w}" height="${Math.min(6, it.d * 0.3)}"/>
       <rect class="detail" stroke-width="${sw}" x="${-Math.min(hw * 0.4, 14)}" y="${-hd + 2}" width="${Math.min(it.w * 0.4, 28)}" height="${it.d - 4}" rx="3"/>`;
     case "kapakli": return `<line class="detail" stroke-width="${sw}" x1="${-hw}" y1="${hd - 3}" x2="${hw}" y2="${hd - 3}"/>`;
     case "ayna": return `<line class="detail" stroke-width="${sw * 1.5}" x1="${-hw + 3}" y1="${hd}" x2="${hw - 3}" y2="${hd}"/>`;
@@ -1483,6 +1490,18 @@ const scene3d = (() => {
       case "monitor": {
         // stand base, neck at the back, panel in front of the neck; screen faces +z
         const ph = Math.min(W * 0.605, H - 0.05), pz = -D / 2 + 0.07, base = Math.min(W * 0.42, 0.3);
+        if (it.stand === "tripod") {
+          // ROG tripod: two long legs splay forward from the neck, short foot behind it
+          const zh = -D / 2 + 0.05, tipX = Math.min(W * 0.44, 0.27), tipZ = D / 2 - 0.015;
+          for (const sx of [-1, 1]) {
+            const dx = sx * tipX, dz = tipZ - zh;
+            const leg = bx(g, 0.032, 0.016, Math.hypot(dx, dz), "#202227", dx / 2, 0, zh + dz / 2, { metalness: 0.5, roughness: 0.45 });
+            leg.rotation.y = Math.atan2(dx, dz);
+          }
+          bx(g, 0.05, 0.016, 0.07, "#202227", 0, 0, -D / 2 + 0.035, { metalness: 0.5, roughness: 0.45 });
+          const logo = new THREE.Mesh(new THREE.CircleGeometry(0.045, 32), new THREE.MeshBasicMaterial({ color: "#ff2a3c", transparent: true, opacity: 0.45, depthWrite: false }));
+          logo.rotation.x = -Math.PI / 2; logo.position.set(0, 0.003, (zh + tipZ) / 2 + 0.02); g.add(logo);
+        } else
         bx(g, base, 0.018, D - 0.02, "#202227", 0, 0, 0.0, { metalness: 0.4, roughness: 0.5 });
         bx(g, 0.07, H - ph * 0.55, 0.035, "#202227", 0, 0.018, -D / 2 + 0.035, { metalness: 0.4, roughness: 0.5 });
         bx(g, W, ph, 0.045, c, 0, H - ph, pz, { roughness: 0.45, metalness: 0.25 });
