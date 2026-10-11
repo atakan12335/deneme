@@ -249,6 +249,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
       <label for="scene" class="eyebrow" style="margin:0">Plan</label>
       <select id="scene"></select>
       <button type="button" class="btn" id="btnScene">+ Taslak oluştur</button>
+      <div class="seg" role="group" aria-label="Duvar boyası" id="paintSeg">
+        <button type="button" data-paint="0" aria-pressed="false">Boyasız</button>
+        <button type="button" data-paint="1" aria-pressed="true">Boyalı</button>
+      </div>
     </div>
     <div class="bar-actions">
       <div class="seg" role="group" aria-label="Görünüm">
@@ -338,6 +342,7 @@ const KINDS = {
   ekran:    { label: "Duvar TV / ekran", w: 219, d: 8, h: 126, color: "#121418", elev: 60 },
   camdolap: { label: "Işıklı cam gardırop", w: 200, d: 60, h: 200, color: "#1b1d22" },
   kask:     { label: "Kask (duvarda)", w: 30, d: 35, h: 30, color: "#2b2f36", elev: 160 },
+  kolon:    { label: "Kolon / duvar çıkıntısı", w: 40, d: 30, h: 260, color: "#ece6dc" },
   monitor:  { label: "Monitör (masada)", w: 61, d: 22, h: 52, color: "#16181c", elev: 75 },
   aksesuar: { label: "Aksesuar (sadece listede)", w: 1, d: 1, h: 1, color: "#8a919c" },
   kutu:     { label: "Diğer",          w: 50,  d: 50,  h: 50,  color: "#a3a9b3" },
@@ -367,6 +372,7 @@ const state = {
   view: "both",
   mode: "loading", // loading | db | local
   scene: "mevcut",
+  painted: true,
   scenes: [{ id: "mevcut", name: "Şu anki hali" }],
   readOnly: false,
 };
@@ -415,8 +421,55 @@ function normItem(id, o) {
 const plain = (it) => { const { id, ...rest } = it; return rest; };
 function normScenes(list) {
   const out = (Array.isArray(list) ? list : []).filter((x) => x && typeof x.id === "string" && x.id !== "mevcut")
-    .map((x) => ({ id: x.id, name: String(x.name || "Taslak") }));
+    .map((x) => ({
+      id: x.id, name: String(x.name || "Taslak"),
+      wallColor: isHex(x.wallColor) ? x.wallColor : "",
+      accentWall: WALLS[x.accentWall] ? x.accentWall : "",
+      accentColor: isHex(x.accentColor) ? x.accentColor : "#3b4047",
+    }));
   return [{ id: "mevcut", name: "Şu anki hali" }, ...out];
+}
+const isHex = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+const curScene = () => state.scenes.find((x) => x.id === state.scene);
+const hasPaint = (sc) => !!(sc && (sc.wallColor || sc.accentWall));
+// the room as the active plan shows it: the draft's paint scheme applies only while "Boyalı" is on
+function effRoom() {
+  const sc = curScene(), R = state.room;
+  const wallColors = { ust: R.wallColor, alt: R.wallColor, sol: R.wallColor, sag: R.wallColor };
+  if (state.painted && hasPaint(sc)) {
+    if (sc.wallColor) for (const k in wallColors) wallColors[k] = sc.wallColor;
+    if (sc.accentWall) wallColors[sc.accentWall] = sc.accentColor;
+  }
+  return { ...R, wallColors, accentWall: state.painted && sc && sc.accentWall ? sc.accentWall : "" };
+}
+/* paint estimate: 2 coats, ~10 m² per litre per coat, 10 % waste; Filli Boya Momento Max prices (Koçtaş, 11.10.2026) */
+const PAINT = { coverage: 10, coats: 2, waste: 1.1, big: { l: 7.5, price: 2990 }, small: { l: 2.5, price: 1150 }, supplies: 600 };
+function wallArea(wall) {
+  const R = state.room, len = wall === "ust" || wall === "alt" ? R.w : R.l;
+  let a = len * R.h;
+  for (const o of R.openings) if (o.wall === wall) a -= Math.min(o.width, len) * Math.min(o.type === "pencere" ? o.height : o.height, R.h);
+  return Math.max(0, a) / 10000;
+}
+function cansFor(litres) {
+  let big = Math.floor(litres / PAINT.big.l), rest = litres - big * PAINT.big.l, small = 0;
+  if (rest > 0) { small = Math.ceil(rest / PAINT.small.l); if (small * PAINT.small.price >= PAINT.big.price) { big++; small = 0; } }
+  return { big, small, price: big * PAINT.big.price + small * PAINT.small.price };
+}
+function paintEstimate(sc) {
+  if (!hasPaint(sc)) return null;
+  const groups = new Map();
+  for (const wall of Object.keys(WALLS)) {
+    const color = wall === sc.accentWall ? sc.accentColor : sc.wallColor;
+    if (!color) continue;
+    groups.set(color, (groups.get(color) || 0) + wallArea(wall));
+  }
+  let area = 0, price = PAINT.supplies; const parts = [];
+  for (const [color, a] of groups) {
+    const litres = a * PAINT.coats / PAINT.coverage * PAINT.waste, c = cansFor(litres);
+    area += a; price += c.price;
+    parts.push({ color, area: a, litres, ...c });
+  }
+  return { area, price, parts };
 }
 // accessories (mounts, LED strips) only count toward the shopping list; they take no room
 const placed = () => sortedItems().filter((i) => i.kind !== "aksesuar");
@@ -630,6 +683,11 @@ function remove(id) {
 function pickScene(id) {
   if (!state.scenes.some((x) => x.id === id)) id = "mevcut";
   if (state.scene !== id) { state.scene = id; state.sel = null; }
+  const ps = $("#paintSeg");
+  if (ps) {
+    ps.hidden = !hasPaint(curScene());
+    ps.querySelectorAll("[data-paint]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.paint === (state.painted ? "1" : "0"))));
+  }
   $("#scene").innerHTML = state.scenes.map((x) => `<option value="${esc(x.id)}" ${x.id === id ? "selected" : ""}>${esc(x.name)}</option>`).join("");
 }
 function createScene() {
@@ -637,7 +695,8 @@ function createScene() {
   const id = "t" + Date.now().toString(36);
   const n = state.scenes.filter((x) => x.id !== "mevcut").length + 1;
   const src = sortedItems(), base = Date.now();
-  state.scenes.push({ id, name: "Taslak " + n });
+  const cs = curScene() || {};
+  state.scenes.push({ id, name: "Taslak " + n, wallColor: cs.wallColor || "", accentWall: cs.accentWall || "", accentColor: cs.accentColor || "#3b4047" });
   src.forEach((it, i) => {
     const nid = newId() + i;
     state.items.set(nid, normItem(nid, { ...it, scene: id, created: base + i }));
@@ -691,15 +750,18 @@ function renderSummary() {
   const used = items.filter((i) => i.kind !== "hali" && i.elev < 30).reduce((s, i) => s + i.w * i.d, 0) / 10000;
   const buy = items.filter((i) => i.status !== "mevcut");
   const priced = buy.filter((i) => i.price != null);
-  const total = priced.reduce((s, i) => s + i.price, 0);
+  const paint = state.painted ? paintEstimate(curScene()) : null;
+  const total = priced.reduce((s, i) => s + i.price, 0) + (paint ? paint.price : 0);
   const waiting = buy.length - priced.length;
+  const cansTxt = (c) => [c.big ? `${c.big}×7,5 L` : "", c.small ? `${c.small}×2,5 L` : ""].filter(Boolean).join(" + ");
   const warnCount = (state.warn || new Map()).size;
   $("#stats").innerHTML = `
     <div><dt>Taban alanı</dt><dd>${fmt(floorArea)} m²</dd></div>
     <div><dt>Eşya kaplıyor</dt><dd>${floorArea ? Math.round(used / floorArea * 100) : 0}%</dd></div>
     <div><dt>Zaten var</dt><dd>${items.length - buy.length} eşya</dd></div>
     <div><dt>Alınacak</dt><dd>${buy.length} eşya</dd></div>
-    <div style="grid-column:1/-1"><dt>Bu planın maliyeti</dt><dd>${priced.length ? tl.format(total) : "—"}${waiting ? ` <span style="color:var(--muted);font-size:12px">· ${waiting} eşyanın fiyatı bekleniyor</span>` : ""}</dd></div>
+    ${paint ? `<div style="grid-column:1/-1"><dt>Boya (tahmini, işçilik hariç)</dt><dd>${tl.format(paint.price)} <span style="color:var(--muted);font-size:12px">· ${fmt(paint.area)} m² · ${paint.parts.map((p) => `<span class="swatch" style="display:inline-block;vertical-align:-1px;background:${p.color}"></span> ${cansTxt(p)}`).join(" · ")}</span></dd></div>` : ""}
+    <div style="grid-column:1/-1"><dt>Bu planın maliyeti${paint ? " (boya dahil)" : ""}</dt><dd>${priced.length || paint ? tl.format(total) : "—"}${waiting ? ` <span style="color:var(--muted);font-size:12px">· ${waiting} eşyanın fiyatı bekleniyor</span>` : ""}</dd></div>
     ${warnCount ? `<div style="grid-column:1/-1"><dt>Uyarı</dt><dd style="color:var(--warn)">${warnCount} eşyada sorun var</dd></div>` : ""}`;
   const links = items.filter((i) => i.link);
   $("#shop").innerHTML = links.map((i) => `<li><a href="${esc(safeUrl(i.link))}" target="_blank" rel="noopener">${esc(i.name)}</a><span class="mono">${i.price != null ? tl.format(i.price) : ""}</span></li>`).join("");
@@ -739,7 +801,7 @@ function renderPlan() {
     const hw = it.w / 2, hd = it.d / 2;
     const bodySw = state.sel === it.id ? px(2.5) : warn.has(it.id) ? px(2) : px(1.2);
     h += `<g class="${cls}" data-id="${esc(it.id)}" transform="translate(${it.x} ${it.y}) rotate(${it.rot})">
-      <rect class="body" x="${-hw}" y="${-hd}" width="${it.w}" height="${it.d}" rx="${Math.min(2, hw, hd)}" fill="${esc(it.color)}" stroke-width="${bodySw}"/>
+      <rect class="body" x="${-hw}" y="${-hd}" width="${it.w}" height="${it.d}" rx="${Math.min(2, hw, hd)}" fill="${esc(itemColor(it))}" stroke-width="${bodySw}"/>
       ${planDetail(it, sw)}
       ${it.kind !== "hali" ? `<line class="front" x1="${-hw * 0.35}" y1="${hd - px(3)}" x2="${hw * 0.35}" y2="${hd - px(3)}" stroke-width="${px(2)}"/>` : ""}
     </g>`;
@@ -747,11 +809,13 @@ function renderPlan() {
 
   // walls with openings
   const fr = { ust: [0, -T, 1], alt: [0, L, 1], sol: [-T, 0, 0], sag: [W, 0, 0] };
+  const ER = effRoom();
   for (const wall of Object.keys(WALLS)) {
     const f = wallFrame(wall), [ox, oy, horiz] = fr[wall];
     const ops = state.room.openings.filter((o) => o.wall === wall);
     for (const [a, b] of wallSegments(f.len, ops)) {
-      h += horiz ? `<rect class="wall" x="${a}" y="${oy}" width="${b - a}" height="${T}"/>` : `<rect class="wall" x="${ox}" y="${a}" width="${T}" height="${b - a}"/>`;
+      const paintFill = ER.accentWall === wall ? ` style="fill:${ER.wallColors[wall]}"` : "";
+      h += horiz ? `<rect class="wall"${paintFill} x="${a}" y="${oy}" width="${b - a}" height="${T}"/>` : `<rect class="wall"${paintFill} x="${ox}" y="${a}" width="${T}" height="${b - a}"/>`;
     }
     for (const o of ops) {
       const a = clamp(o.offset, 0, f.len), b = clamp(o.offset + o.width, 0, f.len);
@@ -807,6 +871,12 @@ function renderPlan() {
     h += m(cx, b.y1, cx, L, L - b.y1, cx + px(4), (b.y1 + L) / 2 + px(4)).replace('text-anchor="middle"', 'text-anchor="start"');
   }
   svg.innerHTML = h;
+}
+// a column is part of the wall, so it takes the main wall colour of the active plan
+function itemColor(it) {
+  if (it.kind !== "kolon") return it.color;
+  const ER = effRoom(), k = Object.keys(WALLS).find((w) => w !== ER.accentWall);
+  return ER.wallColors[k] || it.color;
 }
 function planDetail(it, sw) {
   const hw = it.w / 2, hd = it.d / 2;
@@ -988,6 +1058,15 @@ function renderRoomInspector(dis) {
     <div class="form">
       <div><p class="eyebrow">Bu taslak</p><p class="note">Oda ölçüleri bütün planlarda ortak. Eşyalar yalnızca bu taslağa ait.</p></div>
       <div class="field"><label for="sc-name">Taslak adı</label><input id="sc-name" value="${esc(sc ? sc.name : "")}" ${dis}></div>
+      <div><p class="eyebrow" style="margin-top:6px">Boyalı hali</p><p class="note">Üstteki Boyasız / Boyalı düğmesiyle karşılaştır. Boyasızda duvarlar bugünkü renginde kalır.</p></div>
+      <div class="row">
+        <div class="field"><label for="sc-wallon">Bütün duvarlar</label><select id="sc-wallon" data-sk="wallOn" ${dis}><option value="0" ${sc && sc.wallColor ? "" : "selected"}>Boyanmasın</option><option value="1" ${sc && sc.wallColor ? "selected" : ""}>Boyansın</option></select></div>
+        <div class="field"><label for="sc-wall">Duvar rengi</label><input id="sc-wall" type="color" data-sk="wallColor" value="${esc(sc && sc.wallColor ? sc.wallColor : R.wallColor)}" ${dis} ${sc && sc.wallColor ? "" : "disabled"}></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="sc-acc">Vurgu duvarı</label><select id="sc-acc" data-sk="accentWall" ${dis}><option value="">Yok</option>${Object.entries(WALLS).map(([k, v]) => `<option value="${k}" ${sc && sc.accentWall === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+        <div class="field"><label for="sc-accc">Vurgu rengi</label><input id="sc-accc" type="color" data-sk="accentColor" value="${esc(sc ? sc.accentColor : "#3b4047")}" ${dis} ${sc && sc.accentWall ? "" : "disabled"}></div>
+      </div>
       <div class="actions"><button type="button" class="btn danger" data-act="scdel" ${dis}>Taslağı sil</button></div>
     </div>`;
   insp.innerHTML = scenePart + `
@@ -1003,7 +1082,7 @@ function renderRoomInspector(dis) {
         ${numField("r-h", "Tavan", R.h, "h", dis + ' min="150"')}
       </div>
       <div class="row">
-        <div class="field"><label for="r-wall">Duvar rengi</label><input id="r-wall" type="color" data-k="wallColor" value="${esc(R.wallColor)}" ${dis}></div>
+        <div class="field"><label for="r-wall">Bugünkü duvar rengi</label><input id="r-wall" type="color" data-k="wallColor" value="${esc(R.wallColor)}" ${dis}></div>
         <div class="field"><label for="r-floor">Zemin rengi</label><input id="r-floor" type="color" data-k="floorColor" value="${esc(R.floorColor)}" ${dis}></div>
       </div>
       <h3>Kapı ve pencereler</h3>
@@ -1061,6 +1140,15 @@ function applyItemField(it, k, v) {
 }
 insp.addEventListener("input", (e) => {
   const t = e.target; if (state.readOnly) return;
+  if (t.dataset.sk) {
+    const sc = curScene(); if (!sc) return;
+    const k = t.dataset.sk;
+    if (k === "wallOn") sc.wallColor = t.value === "1" ? (sc.wallColor || state.room.wallColor) : "";
+    else sc[k] = t.value;
+    saveSoon("scenes"); pickScene(state.scene); renderAll();
+    if (k === "wallOn" || k === "accentWall") renderInspector();
+    return;
+  }
   if (t.id === "sc-name") {
     const sc = state.scenes.find((x) => x.id === state.scene); if (!sc) return;
     sc.name = t.value.trim() || "Taslak"; pickScene(state.scene); saveSoon("scenes"); return;
@@ -1125,6 +1213,12 @@ $("#lib").addEventListener("click", (e) => { const b = e.target.closest("[data-a
 $("#list").addEventListener("click", (e) => { const b = e.target.closest("[data-pick]"); if (b) select(b.dataset.pick); });
 $("#scene").addEventListener("change", (e) => { pickScene(e.target.value); rememberScene(state.scene); renderAll(); renderInspector(); });
 $("#btnScene").addEventListener("click", createScene);
+$("#paintSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-paint]"); if (!b) return;
+  state.painted = b.dataset.paint === "1";
+  try { localStorage.setItem(LS_KEY + "-paint", state.painted ? "1" : "0"); } catch (err) { /* ignore */ }
+  pickScene(state.scene); renderAll();
+});
 $("#btnRoom").addEventListener("click", () => { state.sel = null; renderList(); renderPlan(); renderInspector(); scene3d.mark(); insp.scrollTop = 0; });
 document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
   state.view = b.dataset.view; $("#views").dataset.view = state.view;
@@ -1218,13 +1312,14 @@ const scene3d = (() => {
 
   function buildRoom() {
     disposeGroup(roomG); walls = {};
-    const R = state.room, W = S(R.w), L = S(R.l), H = S(R.h), t = 0.1;
+    const R = effRoom(), W = S(R.w), L = S(R.l), H = S(R.h), t = 0.1;
     const tex = floorTexture(R.floorColor); tex.repeat.set(W / 1.6, L / 1.6);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; roomG.add(floor);
     const base = new THREE.Mesh(new THREE.BoxGeometry(W + 2 * t, 0.06, L + 2 * t), mat("#9aa3ad"));
     base.position.y = -0.031; roomG.add(base);
-    const wm = mat(R.wallColor), trim = shade("#ffffff", 0);
+    const trim = shade("#ffffff", 0);
+    let wm; // the wall being built, set per wall below
     const defs = {
       ust: { len: R.w, place: (g, a, b, y0, y1) => bx(g, S(b - a), S(y1 - y0), t, wm, -W / 2 + S((a + b) / 2), S(y0), -L / 2 - t / 2) },
       alt: { len: R.w, place: (g, a, b, y0, y1) => bx(g, S(b - a), S(y1 - y0), t, wm, -W / 2 + S((a + b) / 2), S(y0), L / 2 + t / 2) },
@@ -1233,6 +1328,7 @@ const scene3d = (() => {
     };
     for (const [k, def] of Object.entries(defs)) {
       const g = new THREE.Group(); g.name = k; roomG.add(g); walls[k] = g;
+      wm = mat(R.wallColors[k]);
       const ops = R.openings.filter((o) => o.wall === k);
       const ext = k === "ust" || k === "alt" ? 10 : 0; // corners
       for (const [a, b] of wallSegments(def.len, ops)) def.place(g, a === 0 ? a - ext : a, b === def.len ? b + ext : b, 0, R.h);
@@ -1260,7 +1356,7 @@ const scene3d = (() => {
   }
 
   function buildItem(it) {
-    const g = new THREE.Group(), W = S(it.w), D = S(it.d), H = S(it.h), c = it.color, dark = shade(c, -0.35);
+    const g = new THREE.Group(), W = S(it.w), D = S(it.d), H = S(it.h), c = itemColor(it), dark = shade(c, -0.35);
     switch (it.kind) {
       case "yatak": {
         const top = Math.min(0.5, H), baseH = Math.max(top - 0.2, 0.06);
@@ -1445,7 +1541,7 @@ const scene3d = (() => {
     requestAnimationFrame(loop);
     if (!host.clientWidth) return;
     if (dirtyRoom) {
-      const key = JSON.stringify(state.room);
+      const key = JSON.stringify(effRoom());
       if (key !== roomKey) { const first = !roomKey; roomKey = key; buildRoom(); if (first) cam("genel"); }
       dirtyRoom = false; needFrame = true;
     }
@@ -1491,7 +1587,7 @@ window.odaKamera = (from, to) => scene3d.look && scene3d.look(from, to);
 
 /* ---------- boot ---------- */
 try { const v = localStorage.getItem(LS_KEY + "-view"); if (v && ["plan", "3d", "both"].includes(v)) { state.view = v; $("#views").dataset.view = v; document.querySelectorAll("[data-view]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.view === v)); } } catch (e) { /* ignore */ }
-try { preferredScene = localStorage.getItem(LS_KEY + "-scene"); } catch (e) { /* ignore */ }
+try { preferredScene = localStorage.getItem(LS_KEY + "-scene"); state.painted = localStorage.getItem(LS_KEY + "-paint") !== "0"; } catch (e) { /* ignore */ }
 pickScene("mevcut");
 renderLib();
 renderAll();
