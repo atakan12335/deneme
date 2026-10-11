@@ -342,6 +342,7 @@ const KINDS = {
   ekran:    { label: "Duvar TV / ekran", w: 219, d: 8, h: 126, color: "#121418", elev: 60 },
   camdolap: { label: "Işıklı cam gardırop", w: 200, d: 60, h: 200, color: "#1b1d22" },
   kask:     { label: "Kask (duvarda)", w: 30, d: 35, h: 30, color: "#2b2f36", elev: 160 },
+  uplighter:{ label: "Tavana yansıtan lamba", w: 31, d: 31, h: 170, color: "#1c1d20" },
   kolon:    { label: "Kolon / duvar çıkıntısı", w: 40, d: 30, h: 260, color: "#ece6dc" },
   monitor:  { label: "Monitör (masada)", w: 61, d: 22, h: 52, color: "#16181c", elev: 75 },
   aksesuar: { label: "Aksesuar (sadece listede)", w: 1, d: 1, h: 1, color: "#8a919c" },
@@ -896,6 +897,7 @@ function planDetail(it, sw) {
     case "lamba": return `<circle class="detail" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.6}"/>`;
     case "monitor": return `<rect class="detail-fill" stroke-width="${sw}" x="${-hw}" y="${-hd + 3}" width="${it.w}" height="${Math.min(6, it.d * 0.3)}"/>
       <rect class="detail" stroke-width="${sw}" x="${-Math.min(hw * 0.4, 14)}" y="${-hd + 2}" width="${Math.min(it.w * 0.4, 28)}" height="${it.d - 4}" rx="3"/>`;
+    case "uplighter": return `<circle class="detail-fill" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.85}"/><circle class="detail" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.35}"/>`;
     case "kask": return `<ellipse class="detail-fill" stroke-width="${sw}" rx="${hw * 0.85}" ry="${hd * 0.75}"/>`;
     case "ekran": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 4}" y1="${hd - 2}" x2="${hw - 4}" y2="${hd - 2}"/>`;
     case "camdolap": {
@@ -1435,6 +1437,24 @@ const scene3d = (() => {
         cy(g, r * 0.7, r * 0.8, 0.03, "#2b2f36", 0, 0, 0, { metalness: 0.4, roughness: 0.4 });
         cy(g, 0.012, 0.012, Math.max(H - 0.25, 0.05), c, 0, 0.03, 0, { metalness: 0.4, roughness: 0.4 });
         cy(g, r * 0.55, r, Math.min(0.25, H * 0.3), "#f4eedc", 0, H - Math.min(0.25, H * 0.3), 0, { emissive: "#6b5a2e", emissiveIntensity: 0.6 });
+        break;
+      }
+      case "uplighter": {
+        // floor uplighter: base, pole and a head that throws a rippling pool of light on the ceiling
+        const r = Math.min(W, D) / 2;
+        cy(g, r * 0.9, r, 0.03, c, 0, 0, 0, { metalness: 0.4, roughness: 0.4 });
+        cy(g, 0.015, 0.015, Math.max(H - 0.1, 0.05), c, 0, 0.03, 0, { metalness: 0.5, roughness: 0.35 });
+        cy(g, r, r * 0.8, 0.07, c, 0, H - 0.07, 0, { metalness: 0.4, roughness: 0.4 });
+        const lens = cy(g, r * 0.85, r * 0.85, 0.005, "#cfd8ff", 0, H, 0, { emissive: "#8f7dff", emissiveIntensity: 1.2 });
+        lens.castShadow = false;
+        const throwH = Math.max(S(state.room.h) - S(it.elev) - H, 0.05);
+        const pool = Math.min(1.0, 0.3 + throwH * 1.2);
+        const ripple = ["#6a5cff", "#36c9ff", "#b05cff"];
+        ripple.forEach((col, i) => {
+          const ring = new THREE.Mesh(new THREE.RingGeometry(pool * (0.25 + i * 0.25), pool * (0.42 + i * 0.25), 48),
+            new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.32 - i * 0.07, side: THREE.DoubleSide, depthWrite: false }));
+          ring.rotation.x = Math.PI / 2; ring.position.y = H + throwH - 0.01; g.add(ring);
+        });
         break;
       }
       case "monitor": {
