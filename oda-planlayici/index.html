@@ -377,6 +377,7 @@ function normOpening(o) {
     height: Math.max(10, num(o.height, type === "kapi" ? 205 : 130)),
     sill: Math.max(0, num(o.sill, 90)),
     hinge: o.hinge === "b" ? "b" : "a",
+    swing: o.swing === "dis" ? "dis" : "ic",
   };
 }
 function normItem(id, o) {
@@ -451,7 +452,7 @@ function computeWarnings() {
   const add = (id, m) => { if (!out.has(id)) out.set(id, []); if (!out.get(id).includes(m)) out.get(id).push(m); };
   const items = sortedItems();
   const polys = new Map(items.map((it) => [it.id, corners(it)]));
-  const doors = state.room.openings.filter((o) => o.type === "kapi");
+  const doors = state.room.openings.filter((o) => o.type === "kapi" && o.swing !== "dis");
   for (const it of items) {
     const b = bbox(polys.get(it.id));
     if (b.x0 < -0.5 || b.y0 < -0.5 || b.x1 > W + 0.5 || b.y1 > L + 0.5) add(it.id, "Oda sınırının dışına taşıyor");
@@ -666,7 +667,7 @@ function renderPlan() {
   <rect x="0" y="0" width="${W}" height="${L}" fill="url(#g50)"/>`;
 
   // door swing zones
-  for (const o of state.room.openings) if (o.type === "kapi") h += `<polygon class="door-zone" points="${doorZone(o).map((p) => p.join(",")).join(" ")}"/>`;
+  for (const o of state.room.openings) if (o.type === "kapi" && o.swing !== "dis") h += `<polygon class="door-zone" points="${doorZone(o).map((p) => p.join(",")).join(" ")}"/>`;
 
   // items (rugs first, then by elevation)
   const items = sortedItems().sort((a, b) => (b.kind === "hali") - (a.kind === "hali") || a.elev - b.elev);
@@ -694,6 +695,12 @@ function renderPlan() {
       if (o.type === "pencere") {
         if (horiz) h += `<rect class="win-fill" x="${a}" y="${oy}" width="${b - a}" height="${T}"/><path class="win-line" stroke-width="${px(1.2)}" d="M${a} ${oy}H${b}V${oy + T}H${a}ZM${a} ${oy + T / 2}H${b}"/>`;
         else h += `<rect class="win-fill" x="${ox}" y="${a}" width="${T}" height="${b - a}"/><path class="win-line" stroke-width="${px(1.2)}" d="M${ox} ${a}V${b}H${ox + T}V${a}ZM${ox + T / 2} ${a}V${b}"/>`;
+      } else if (o.swing === "dis") {
+        // opens away from the room: mark the opening only, nothing to keep clear inside
+        const P = (t, k) => [f.o[0] + f.a[0] * t - f.n[0] * k, f.o[1] + f.a[1] * t - f.n[1] * k];
+        const [p0, p1] = [P(a, T / 2), P(b, T / 2)], hp = P(o.hinge === "a" ? a : b, 0), he = P(o.hinge === "a" ? a : b, T);
+        h += `<line class="door-arc" stroke-width="${sw}" x1="${p0[0]}" y1="${p0[1]}" x2="${p1[0]}" y2="${p1[1]}"/>
+              <line class="door-leaf" stroke-width="${px(2.2)}" x1="${hp[0]}" y1="${hp[1]}" x2="${he[0]}" y2="${he[1]}"/>`;
       } else {
         const ht = o.hinge === "a" ? a : b, jt = o.hinge === "a" ? b : a, wd = b - a;
         const H = [f.o[0] + f.a[0] * ht, f.o[1] + f.a[1] * ht], J = [f.o[0] + f.a[0] * jt, f.o[1] + f.a[1] * jt];
@@ -938,6 +945,7 @@ function renderRoomInspector(dis) {
               ? field(`o${i}-sill`, "Yerden (parapet)", fmtIn(o.sill), `type="number" inputmode="decimal" step="any" data-ok="sill" ${dis}`)
               : `<div class="field"><label for="o${i}-hinge">Menteşe</label><select id="o${i}-hinge" data-ok="hinge" ${dis}><option value="a" ${o.hinge === "a" ? "selected" : ""}>${o.wall === "sol" || o.wall === "sag" ? "Üst tarafta" : "Sol tarafta"}</option><option value="b" ${o.hinge === "b" ? "selected" : ""}>${o.wall === "sol" || o.wall === "sag" ? "Alt tarafta" : "Sağ tarafta"}</option></select></div>`}
           </div>
+          ${o.type === "kapi" ? `<div class="field"><label for="o${i}-swing">Açılış yönü</label><select id="o${i}-swing" data-ok="swing" ${dis}><option value="ic" ${o.swing !== "dis" ? "selected" : ""}>Odanın içine açılır</option><option value="dis" ${o.swing === "dis" ? "selected" : ""}>Dışarı açılır</option></select></div>` : ""}
         </div>`).join("")}
       <div class="actions">
         <button type="button" class="btn" data-act="addop" data-type="kapi" ${dis}>+ Kapı</button>
