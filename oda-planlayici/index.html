@@ -1442,7 +1442,7 @@ const scene3d = (() => {
         }
         break;
       }
-      case "hali": { const m = bx(g, W, Math.max(H, 0.008), D, c); m.castShadow = false; break; }
+      case "hali": { const m = bx(g, W, Math.max(H, 0.008), D, c, 0, 0.001, 0); m.castShadow = false; break; }
       case "koltuk": {
         const arm = W > 0.9 ? 0.14 : 0;
         bx(g, W, H * 0.45, D, shade(c, -0.15), 0, 0, 0);
@@ -1661,10 +1661,13 @@ const scene3d = (() => {
   return {
     mark(all) { dirtyItems = true; if (all) dirtyRoom = true; needFrame = true; },
     resize, cam, look,
+    // raw groups, used to export the 3D model (e.g. USDZ for iPhone)
+    groups: () => ({ roomG, itemsG }),
   };
 })();
 
 window.odaKamera = (from, to) => scene3d.look && scene3d.look(from, to);
+window.odaGruplar = () => scene3d.groups && scene3d.groups();
 
 /* ---------- boot ---------- */
 try { const v = localStorage.getItem(LS_KEY + "-view"); if (v && ["plan", "3d", "both"].includes(v)) { state.view = v; $("#views").dataset.view = v; document.querySelectorAll("[data-view]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.view === v)); } } catch (e) { /* ignore */ }
