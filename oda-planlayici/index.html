@@ -338,6 +338,7 @@ const KINDS = {
   ekran:    { label: "Duvar TV / ekran", w: 219, d: 8, h: 126, color: "#121418", elev: 60 },
   camdolap: { label: "Işıklı cam gardırop", w: 200, d: 60, h: 200, color: "#1b1d22" },
   kask:     { label: "Kask (duvarda)", w: 30, d: 35, h: 30, color: "#2b2f36", elev: 160 },
+  monitor:  { label: "Monitör (masada)", w: 61, d: 22, h: 52, color: "#16181c", elev: 75 },
   aksesuar: { label: "Aksesuar (sadece listede)", w: 1, d: 1, h: 1, color: "#8a919c" },
   kutu:     { label: "Diğer",          w: 50,  d: 50,  h: 50,  color: "#a3a9b3" },
 };
@@ -823,6 +824,8 @@ function planDetail(it, sw) {
     case "kitaplik": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 2}" y1="${-hd + 2}" x2="${hw - 2}" y2="${-hd + 2}"/>`;
     case "sandalye": return `<rect class="detail" stroke-width="${sw}" x="${-hw * 0.8}" y="${-hd}" width="${it.w * 0.8}" height="${Math.min(8, it.d * 0.15)}" rx="2"/>`;
     case "lamba": return `<circle class="detail" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.6}"/>`;
+    case "monitor": return `<rect class="detail-fill" stroke-width="${sw}" x="${-hw}" y="${-hd + 3}" width="${it.w}" height="${Math.min(6, it.d * 0.3)}"/>
+      <rect class="detail" stroke-width="${sw}" x="${-Math.min(hw * 0.4, 14)}" y="${-hd + 2}" width="${Math.min(it.w * 0.4, 28)}" height="${it.d - 4}" rx="3"/>`;
     case "kask": return `<ellipse class="detail-fill" stroke-width="${sw}" rx="${hw * 0.85}" ry="${hd * 0.75}"/>`;
     case "ekran": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 4}" y1="${hd - 2}" x2="${hw - 4}" y2="${hd - 2}"/>`;
     case "camdolap": {
@@ -1338,6 +1341,16 @@ const scene3d = (() => {
         cy(g, r * 0.55, r, Math.min(0.25, H * 0.3), "#f4eedc", 0, H - Math.min(0.25, H * 0.3), 0, { emissive: "#6b5a2e", emissiveIntensity: 0.6 });
         break;
       }
+      case "monitor": {
+        // stand base, neck at the back, panel in front of the neck; screen faces +z
+        const ph = Math.min(W * 0.605, H - 0.05), pz = -D / 2 + 0.07, base = Math.min(W * 0.42, 0.3);
+        bx(g, base, 0.018, D - 0.02, "#202227", 0, 0, 0.0, { metalness: 0.4, roughness: 0.5 });
+        bx(g, 0.07, H - ph * 0.55, 0.035, "#202227", 0, 0.018, -D / 2 + 0.035, { metalness: 0.4, roughness: 0.5 });
+        bx(g, W, ph, 0.045, c, 0, H - ph, pz, { roughness: 0.45, metalness: 0.25 });
+        const scr = bx(g, W - 0.012, ph - 0.012, 0.004, "#0c1a2b", 0, H - ph + 0.006, pz + 0.024, { emissive: "#2a5d93", emissiveIntensity: 0.6, roughness: 0.12 });
+        scr.castShadow = false;
+        break;
+      }
       case "ekran": {
         bx(g, W, H, D, c, 0, 0, 0, { roughness: 0.4, metalness: 0.3 });
         const scr = bx(g, W - 0.02, H - 0.02, 0.004, "#0e2238", 0, 0.01, D / 2, { emissive: "#1d4e7a", emissiveIntensity: 0.55, roughness: 0.15 });
@@ -1461,11 +1474,20 @@ const scene3d = (() => {
   });
   document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => cam(b.dataset.cam)));
   requestAnimationFrame(loop);
+  // place the camera in plan coordinates (cm): from [x, y, height] looking at [x, y, height]
+  function look(from, to) {
+    const R = state.room;
+    camera.position.set(S(from[0] - R.w / 2), S(from[2]), S(from[1] - R.l / 2));
+    controls.target.set(S(to[0] - R.w / 2), S(to[2]), S(to[1] - R.l / 2));
+    controls.update(); needFrame = true;
+  }
   return {
     mark(all) { dirtyItems = true; if (all) dirtyRoom = true; needFrame = true; },
-    resize, cam,
+    resize, cam, look,
   };
 })();
+
+window.odaKamera = (from, to) => scene3d.look && scene3d.look(from, to);
 
 /* ---------- boot ---------- */
 try { const v = localStorage.getItem(LS_KEY + "-view"); if (v && ["plan", "3d", "both"].includes(v)) { state.view = v; $("#views").dataset.view = v; document.querySelectorAll("[data-view]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.view === v)); } } catch (e) { /* ignore */ }
