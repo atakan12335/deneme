@@ -68,6 +68,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .dims-chip { font-size: 12px; color: var(--muted); }
 .bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.scene-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scene-pick select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); font-weight: 600; max-width: 220px; }
 .sync { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sync::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 .sync[data-s="ok"]::before { background: var(--ok); }
@@ -122,6 +124,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .list .dm { display: block; font-size: 10.5px; color: var(--muted); }
 .chip { font-size: 10.5px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .chip.urun { border-color: var(--ok); color: var(--ok); }
+.chip.var { border-color: var(--accent); color: var(--accent); }
 .chip.warn { border-color: var(--warn); color: var(--warn); }
 .empty { font-size: 13px; color: var(--muted); margin: 0; }
 
@@ -242,6 +245,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
       <h1>Genç Odası Planı</h1>
       <span class="dims-chip mono" id="roomChip">330 × 400 cm · tavan 260</span>
     </div>
+    <div class="scene-pick">
+      <label for="scene" class="eyebrow" style="margin:0">Plan</label>
+      <select id="scene"></select>
+      <button type="button" class="btn" id="btnScene">+ Taslak oluştur</button>
+    </div>
     <div class="bar-actions">
       <div class="seg" role="group" aria-label="Görünüm">
         <button type="button" data-view="plan" aria-pressed="false">Plan</button>
@@ -353,9 +361,14 @@ const state = {
   sel: null,
   view: "both",
   mode: "loading", // loading | db | local
+  scene: "mevcut",
+  scenes: [{ id: "mevcut", name: "Şu anki hali" }],
   readOnly: false,
 };
 let db = null;
+let preferredScene = null; // the viewer's last plan, applied once the plan list has loaded
+const rememberScene = (id) => { try { localStorage.setItem("genc-odasi-plan-v1-scene", id); } catch (e) { /* ignore */ } };
+const applyPreferred = () => { pickScene(preferredScene || state.scene); preferredScene = null; };
 let dragId = null;
 
 function normRoom(r) {
@@ -388,13 +401,19 @@ function normItem(id, o) {
     elev: Math.max(0, num(o.elev, K.elev || 0)),
     x: num(o.x, 100), y: num(o.y, 100), rot: ((num(o.rot, 0) % 360) + 360) % 360,
     color: typeof o.color === "string" && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : K.color,
-    status: o.status === "urun" ? "urun" : "taslak",
+    status: ["urun", "mevcut"].includes(o.status) ? o.status : "taslak",
+    scene: typeof o.scene === "string" && o.scene ? o.scene : "mevcut",
     link: String(o.link || ""), price: o.price === "" || o.price == null ? null : num(o.price, null),
     note: String(o.note || ""), created: num(o.created, 0),
   };
 }
 const plain = (it) => { const { id, ...rest } = it; return rest; };
-const sortedItems = () => [...state.items.values()].sort((a, b) => a.created - b.created || a.id.localeCompare(b.id));
+function normScenes(list) {
+  const out = (Array.isArray(list) ? list : []).filter((x) => x && typeof x.id === "string" && x.id !== "mevcut")
+    .map((x) => ({ id: x.id, name: String(x.name || "Taslak") }));
+  return [{ id: "mevcut", name: "Şu anki hali" }, ...out];
+}
+const sortedItems = () => [...state.items.values()].filter((i) => i.scene === state.scene).sort((a, b) => a.created - b.created || a.id.localeCompare(b.id));
 
 /* ---------- geometry ---------- */
 function corners(it) {
@@ -499,12 +518,13 @@ async function write(key) {
   try {
     if (state.mode === "db" && db) {
       if (key === "room") await db.doc("plan/oda").set(JSON.parse(JSON.stringify(state.room)));
+      else if (key === "scenes") await db.doc("plan/sahneler").set({ list: state.scenes.filter((x) => x.id !== "mevcut") });
       else {
         const id = key.slice(5), it = state.items.get(id), ref = db.doc("esyalar/" + id);
         if (it) await ref.set(JSON.parse(JSON.stringify(plain(it)))); else await ref.delete();
       }
     } else if (state.mode === "local") {
-      try { localStorage.setItem(LS_KEY, JSON.stringify({ room: state.room, items: sortedItems() })); } catch (e) { /* storage blocked */ }
+      try { localStorage.setItem(LS_KEY, JSON.stringify({ room: state.room, scenes: state.scenes, items: [...state.items.values()] })); } catch (e) { /* storage blocked */ }
     }
     lastErr = false;
   } catch (e) {
@@ -538,6 +558,8 @@ function startLocal() {
   if (!data) data = SAMPLE;
   state.room = normRoom(data.room);
   state.items = new Map((data.items || []).map((o, i) => [String(o.id), normItem(String(o.id), { created: i, ...o })]));
+  state.scenes = normScenes(data.scenes);
+  applyPreferred();
   setSync(); renderAll();
 }
 
@@ -549,6 +571,11 @@ async function startStore() {
   try { user = await window.claude.use("user"); } catch (e) { user = null; }
   if (user && user.can) { try { if ((await user.can("data.write")) === false) state.readOnly = true; } catch (e) { /* unknown */ } }
   setSync(); renderAll();
+  db.doc("plan/sahneler").onSnapshot((snap) => {
+    if (dirty.has("scenes")) return;
+    state.scenes = normScenes(snap.exists ? snap.data().list : []);
+    applyPreferred(); renderAll();
+  }, onDbError);
   db.doc("plan/oda").onSnapshot((snap) => {
     if (dirty.has("room")) return;
     if (snap.exists) { state.room = normRoom(snap.data()); renderAll(); }
@@ -579,7 +606,7 @@ function onDbError(e) {
 function addItem(kind) {
   if (state.readOnly) return toast("Bu planı düzenleme iznin yok.");
   const K = KINDS[kind], id = newId();
-  const it = normItem(id, { kind, name: K.label, x: state.room.w / 2, y: state.room.l / 2, created: Date.now() });
+  const it = normItem(id, { kind, name: K.label, x: state.room.w / 2, y: state.room.l / 2, created: Date.now(), scene: state.scene });
   state.items.set(id, it); state.sel = id;
   saveSoon("item:" + id, 0); renderAll();
 }
@@ -592,6 +619,32 @@ function duplicate(id) {
 function remove(id) {
   state.items.delete(id); if (state.sel === id) state.sel = null;
   saveSoon("item:" + id, 0); renderAll();
+}
+function pickScene(id) {
+  if (!state.scenes.some((x) => x.id === id)) id = "mevcut";
+  if (state.scene !== id) { state.scene = id; state.sel = null; }
+  $("#scene").innerHTML = state.scenes.map((x) => `<option value="${esc(x.id)}" ${x.id === id ? "selected" : ""}>${esc(x.name)}</option>`).join("");
+}
+function createScene() {
+  if (state.readOnly) return toast("Bu planı düzenleme iznin yok.");
+  const id = "t" + Date.now().toString(36);
+  const n = state.scenes.filter((x) => x.id !== "mevcut").length + 1;
+  const src = sortedItems(), base = Date.now();
+  state.scenes.push({ id, name: "Taslak " + n });
+  src.forEach((it, i) => {
+    const nid = newId() + i;
+    state.items.set(nid, normItem(nid, { ...it, scene: id, created: base + i }));
+    saveSoon("item:" + nid, 0);
+  });
+  saveSoon("scenes", 0);
+  pickScene(id); rememberScene(id); renderAll();
+  toast(`“Taslak ${n}” oluşturuldu. Değişiklikler yalnızca bu taslağı etkiler.`);
+}
+function deleteScene() {
+  const id = state.scene; if (id === "mevcut") return;
+  for (const it of [...state.items.values()]) if (it.scene === id) { state.items.delete(it.id); saveSoon("item:" + it.id, 0); }
+  state.scenes = state.scenes.filter((x) => x.id !== id);
+  saveSoon("scenes", 0); pickScene("mevcut"); rememberScene("mevcut"); renderAll(); renderInspector();
 }
 function select(id) {
   if (state.sel === id) return;
@@ -622,21 +675,24 @@ function renderList() {
   $("#list").innerHTML = items.map((it) => `<li><button type="button" data-pick="${esc(it.id)}" aria-current="${state.sel === it.id}">
       <span class="swatch" style="background:${esc(it.color)}"></span>
       <span style="min-width:0"><span class="nm">${esc(it.name)}</span><span class="dm mono">${fmt(it.w)}×${fmt(it.d)}×${fmt(it.h)}</span></span>
-      ${warn.has(it.id) ? '<span class="chip warn">uyarı</span>' : it.status === "urun" ? '<span class="chip urun">ürün</span>' : '<span class="chip">taslak</span>'}
+      ${warn.has(it.id) ? '<span class="chip warn">uyarı</span>' : it.status === "urun" ? '<span class="chip urun">ürün</span>' : it.status === "mevcut" ? '<span class="chip var">var</span>' : '<span class="chip">taslak</span>'}
     </button></li>`).join("");
 }
 function renderSummary() {
   const { w, l } = state.room, items = sortedItems();
   const floorArea = w * l / 10000;
   const used = items.filter((i) => i.kind !== "hali" && i.elev < 30).reduce((s, i) => s + i.w * i.d, 0) / 10000;
-  const priced = items.filter((i) => i.price != null);
+  const buy = items.filter((i) => i.status !== "mevcut");
+  const priced = buy.filter((i) => i.price != null);
   const total = priced.reduce((s, i) => s + i.price, 0);
+  const waiting = buy.length - priced.length;
   const warnCount = (state.warn || new Map()).size;
   $("#stats").innerHTML = `
     <div><dt>Taban alanı</dt><dd>${fmt(floorArea)} m²</dd></div>
     <div><dt>Eşya kaplıyor</dt><dd>${floorArea ? Math.round(used / floorArea * 100) : 0}%</dd></div>
-    <div><dt>Seçilen ürün</dt><dd>${items.filter((i) => i.status === "urun").length} / ${items.length}</dd></div>
-    <div><dt>Toplam fiyat</dt><dd>${priced.length ? tl.format(total) : "—"}</dd></div>
+    <div><dt>Zaten var</dt><dd>${items.length - buy.length} eşya</dd></div>
+    <div><dt>Alınacak</dt><dd>${buy.length} eşya</dd></div>
+    <div style="grid-column:1/-1"><dt>Bu planın maliyeti</dt><dd>${priced.length ? tl.format(total) : "—"}${waiting ? ` <span style="color:var(--muted);font-size:12px">· ${waiting} eşyanın fiyatı bekleniyor</span>` : ""}</dd></div>
     ${warnCount ? `<div style="grid-column:1/-1"><dt>Uyarı</dt><dd style="color:var(--warn)">${warnCount} eşyada sorun var</dd></div>` : ""}`;
   const links = items.filter((i) => i.link);
   $("#shop").innerHTML = links.map((i) => `<li><a href="${esc(safeUrl(i.link))}" target="_blank" rel="noopener">${esc(i.name)}</a><span class="mono">${i.price != null ? tl.format(i.price) : ""}</span></li>`).join("");
@@ -813,7 +869,7 @@ function placeSnapped(it, x, y, snap) {
   if (Math.abs(b.y0) < tol) it.y -= b.y0; else if (Math.abs(L - b.y1) < tol) it.y += L - b.y1;
   // snap edges to other furniture edges
   const nb = bbox(corners(it));
-  for (const o of state.items.values()) {
+  for (const o of sortedItems()) {
     if (o.id === it.id || o.kind === "hali") continue;
     const ob = bbox(corners(o));
     const overlapY = nb.y0 < ob.y1 && ob.y0 < nb.y1, overlapX = nb.x0 < ob.x1 && ob.x0 < nb.x1;
@@ -890,8 +946,9 @@ function renderInspector() {
       </div>
       <div class="field"><span class="lab">Durum</span>
         <div class="seg" role="group" aria-label="Durum">
+          <button type="button" data-status="mevcut" aria-pressed="${it.status === "mevcut"}" ${dis}>Zaten var</button>
           <button type="button" data-status="taslak" aria-pressed="${it.status === "taslak"}" ${dis}>Taslak</button>
-          <button type="button" data-status="urun" aria-pressed="${it.status === "urun"}" ${dis}>Gerçek ürün</button>
+          <button type="button" data-status="urun" aria-pressed="${it.status === "urun"}" ${dis}>Seçilen ürün</button>
         </div>
       </div>
       <div class="field"><label for="f-link">Ürün linki</label><div class="linkrow"><input id="f-link" type="url" inputmode="url" placeholder="https://…" data-k="link" value="${esc(it.link)}" ${dis}>${it.link ? `<a href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener">Aç ↗</a>` : ""}</div></div>
@@ -910,7 +967,14 @@ function renderInspector() {
 
 function renderRoomInspector(dis) {
   const R = state.room;
-  insp.innerHTML = `
+  const sc = state.scenes.find((x) => x.id === state.scene);
+  const scenePart = state.scene === "mevcut" ? "" : `
+    <div class="form">
+      <div><p class="eyebrow">Bu taslak</p><p class="note">Oda ölçüleri bütün planlarda ortak. Eşyalar yalnızca bu taslağa ait.</p></div>
+      <div class="field"><label for="sc-name">Taslak adı</label><input id="sc-name" value="${esc(sc ? sc.name : "")}" ${dis}></div>
+      <div class="actions"><button type="button" class="btn danger" data-act="scdel" ${dis}>Taslağı sil</button></div>
+    </div>`;
+  insp.innerHTML = scenePart + `
     <div>
       <p class="eyebrow">Oda</p>
       <h2>Oda ölçüleri</h2>
@@ -981,6 +1045,10 @@ function applyItemField(it, k, v) {
 }
 insp.addEventListener("input", (e) => {
   const t = e.target; if (state.readOnly) return;
+  if (t.id === "sc-name") {
+    const sc = state.scenes.find((x) => x.id === state.scene); if (!sc) return;
+    sc.name = t.value.trim() || "Taslak"; pickScene(state.scene); saveSoon("scenes"); return;
+  }
   const scope = t.closest("[data-scope]")?.dataset.scope;
   if (scope === "item" && t.dataset.k) {
     const it = state.items.get(state.sel); if (!it) return;
@@ -1015,6 +1083,10 @@ insp.addEventListener("click", (e) => {
   const it = state.items.get(state.sel);
   if (btn.dataset.status && it) { it.status = btn.dataset.status; saveSoon("item:" + it.id, 0); renderAll(); renderInspector(); return; }
   switch (btn.dataset.act) {
+    case "scdel":
+      if (delArmed === "scene:" + state.scene) { delArmed = null; deleteScene(); toast("Taslak silindi."); }
+      else { const key = "scene:" + state.scene; delArmed = key; btn.classList.add("armed"); btn.textContent = "Silmek için tekrar bas"; setTimeout(() => { if (delArmed === key) { delArmed = null; btn.classList.remove("armed"); btn.textContent = "Taslağı sil"; } }, 3000); }
+      break;
     case "rot": if (it) { it.rot = (it.rot + 90) % 360; saveSoon("item:" + it.id); renderAll(); renderInspector(); } break;
     case "dup": if (it) duplicate(it.id); renderInspector(); break;
     case "del":
@@ -1035,6 +1107,8 @@ insp.addEventListener("click", (e) => {
 /* ---------- side + bar events ---------- */
 $("#lib").addEventListener("click", (e) => { const b = e.target.closest("[data-add]"); if (b) addItem(b.dataset.add); });
 $("#list").addEventListener("click", (e) => { const b = e.target.closest("[data-pick]"); if (b) select(b.dataset.pick); });
+$("#scene").addEventListener("change", (e) => { pickScene(e.target.value); rememberScene(state.scene); renderAll(); renderInspector(); });
+$("#btnScene").addEventListener("click", createScene);
 $("#btnRoom").addEventListener("click", () => { state.sel = null; renderList(); renderPlan(); renderInspector(); scene3d.mark(); insp.scrollTop = 0; });
 document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
   state.view = b.dataset.view; $("#views").dataset.view = state.view;
@@ -1263,7 +1337,7 @@ const scene3d = (() => {
 
   function buildItems() {
     disposeGroup(itemsG);
-    for (const it of state.items.values()) itemsG.add(buildItem(it));
+    for (const it of sortedItems()) itemsG.add(buildItem(it));
     if (selHelper) { scene.remove(selHelper); selHelper.geometry.dispose(); selHelper = null; }
     const sg = itemsG.children.find((g) => g.userData.id === state.sel);
     if (sg) { selHelper = new THREE.BoxHelper(sg, new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--sel").trim() || "#e9a514")); scene.add(selHelper); }
@@ -1331,6 +1405,8 @@ const scene3d = (() => {
 
 /* ---------- boot ---------- */
 try { const v = localStorage.getItem(LS_KEY + "-view"); if (v && ["plan", "3d", "both"].includes(v)) { state.view = v; $("#views").dataset.view = v; document.querySelectorAll("[data-view]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.view === v)); } } catch (e) { /* ignore */ }
+try { preferredScene = localStorage.getItem(LS_KEY + "-scene"); } catch (e) { /* ignore */ }
+pickScene("mevcut");
 renderLib();
 renderAll();
 new ResizeObserver(() => renderPlan()).observe(svg);
