@@ -335,6 +335,9 @@ const KINDS = {
   raf:      { label: "Duvar rafı",     w: 80,  d: 22,  h: 4,   color: "#d8cbb5", elev: 140 },
   lamba:    { label: "Lambader",       w: 35,  d: 35,  h: 160, color: "#2b2f36" },
   petek:    { label: "Kalorifer peteği", w: 100, d: 10, h: 60, color: "#f1f1ee", elev: 12 },
+  ekran:    { label: "Duvar TV / ekran", w: 219, d: 8, h: 126, color: "#121418", elev: 60 },
+  camdolap: { label: "Işıklı cam gardırop", w: 200, d: 60, h: 200, color: "#1b1d22" },
+  kask:     { label: "Kask (duvarda)", w: 30, d: 35, h: 30, color: "#2b2f36", elev: 160 },
   kutu:     { label: "Diğer",          w: 50,  d: 50,  h: 50,  color: "#a3a9b3" },
 };
 const WALLS = { ust: "Üst duvar", alt: "Alt duvar", sol: "Sol duvar", sag: "Sağ duvar" };
@@ -817,6 +820,13 @@ function planDetail(it, sw) {
     case "kitaplik": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 2}" y1="${-hd + 2}" x2="${hw - 2}" y2="${-hd + 2}"/>`;
     case "sandalye": return `<rect class="detail" stroke-width="${sw}" x="${-hw * 0.8}" y="${-hd}" width="${it.w * 0.8}" height="${Math.min(8, it.d * 0.15)}" rx="2"/>`;
     case "lamba": return `<circle class="detail" stroke-width="${sw}" r="${Math.min(hw, hd) * 0.6}"/>`;
+    case "kask": return `<ellipse class="detail-fill" stroke-width="${sw}" rx="${hw * 0.85}" ry="${hd * 0.75}"/>`;
+    case "ekran": return `<line class="detail" stroke-width="${sw}" x1="${-hw + 4}" y1="${hd - 2}" x2="${hw - 4}" y2="${hd - 2}"/>`;
+    case "camdolap": {
+      const n = Math.max(1, Math.round(it.w / 50));
+      let s = ""; for (let i = 1; i < n; i++) { const x = -hw + it.w * i / n; s += `<line class="detail" stroke-width="${sw}" x1="${x}" y1="${hd - 6}" x2="${x}" y2="${hd}"/>`; }
+      return s + `<line class="detail" stroke-width="${sw * 1.5}" stroke-dasharray="3 2" x1="${-hw}" y1="${hd - 3}" x2="${hw}" y2="${hd - 3}"/>`;
+    }
     case "koltuk": return `<rect class="detail" stroke-width="${sw}" x="${-hw}" y="${-hd}" width="${it.w}" height="${it.d * 0.2}"/>`;
     case "masa": return `<rect class="detail" stroke-width="${sw}" x="${-hw + 3}" y="${-hd + 3}" width="${Math.max(0, it.w - 6)}" height="${Math.max(0, it.d - 6)}"/>`;
     default: return "";
@@ -1167,6 +1177,10 @@ const scene3d = (() => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w, 0.002), Math.max(h, 0.002), Math.max(d, 0.002)), typeof color === "string" ? mat(color, o) : color);
     m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
   }
+  function sp(g, rx, ry, rz, color, x, y, z, o) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), mat(color, o));
+    m.scale.set(rx, ry, rz); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+  }
   function cy(g, rt, rb, h, color, x, y, z, o) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 20), mat(color, o));
     m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
@@ -1319,6 +1333,53 @@ const scene3d = (() => {
         cy(g, r * 0.7, r * 0.8, 0.03, "#2b2f36", 0, 0, 0, { metalness: 0.4, roughness: 0.4 });
         cy(g, 0.012, 0.012, Math.max(H - 0.25, 0.05), c, 0, 0.03, 0, { metalness: 0.4, roughness: 0.4 });
         cy(g, r * 0.55, r, Math.min(0.25, H * 0.3), "#f4eedc", 0, H - Math.min(0.25, H * 0.3), 0, { emissive: "#6b5a2e", emissiveIntensity: 0.6 });
+        break;
+      }
+      case "ekran": {
+        bx(g, W, H, D, c, 0, 0, 0, { roughness: 0.4, metalness: 0.3 });
+        const scr = bx(g, W - 0.02, H - 0.02, 0.004, "#0e2238", 0, 0.01, D / 2, { emissive: "#1d4e7a", emissiveIntensity: 0.55, roughness: 0.15 });
+        scr.castShadow = false;
+        break;
+      }
+      case "kask": {
+        bx(g, Math.min(0.08, W * 0.3), Math.min(0.1, H * 0.35), Math.min(0.12, D * 0.35), "#1a1b1e", 0, H * 0.25, -D / 2 + Math.min(0.06, D * 0.17));
+        sp(g, W / 2, H / 2, D * 0.42, c, 0, H / 2, 0.02, { roughness: 0.35, metalness: 0.2 });
+        sp(g, W * 0.4, H * 0.22, D * 0.12, "#0b0c0e", 0, H * 0.5, D * 0.38, { roughness: 0.05, metalness: 0.6 });
+        break;
+      }
+      case "camdolap": {
+        const th = 0.018, dark = shade(c, -0.2);
+        bx(g, th, H, D, c, -W / 2 + th / 2, 0, 0); bx(g, th, H, D, c, W / 2 - th / 2, 0, 0);
+        bx(g, W, th, D, c, 0, 0, 0); bx(g, W, th, D, c, 0, H - th, 0);
+        bx(g, W - 2 * th, H - 2 * th, 0.01, dark, 0, th, -D / 2 + 0.005);
+        const n = Math.max(1, Math.round(W / 0.5)), sec = (W - 2 * th) / n;
+        const clothes = ["#d9d4c7", "#2f3b52", "#7a2e2e", "#c9a66b", "#3d5c45", "#e6e6e6", "#111111", "#56607a"];
+        for (let i = 0; i < n; i++) {
+          const x0 = -W / 2 + th + sec * i;
+          if (i > 0) bx(g, 0.016, H - 2 * th, D - 0.04, c, x0, th, -0.01);
+          // LED strip at the top of each section
+          const led = bx(g, sec - 0.04, 0.012, 0.02, "#fff6dc", x0 + sec / 2, H - th - 0.03, D / 2 - 0.08, { emissive: "#fff1c9", emissiveIntensity: 1.2 });
+          led.castShadow = false;
+          if (i % 2 === 0) {
+            cy(g, 0.01, 0.01, sec - 0.04, "#b8bcc2", x0 + sec / 2, H - 0.16, 0, { metalness: 0.8, roughness: 0.3 }).rotation.z = Math.PI / 2;
+            const cnt = Math.max(3, Math.floor(sec / 0.06));
+            for (let k = 0; k < cnt; k++) {
+              const len = 0.75 + ((i * 7 + k * 3) % 5) * 0.12;
+              bx(g, 0.035, Math.min(len, H - 0.4), D * 0.7, clothes[(i * 3 + k) % clothes.length], x0 + 0.04 + k * (sec - 0.08) / Math.max(cnt - 1, 1), H - 0.18 - Math.min(len, H - 0.4), 0, { emissive: "#3a3326", emissiveIntensity: 0.25 });
+            }
+          } else {
+            const shelves = Math.max(2, Math.floor((H - 0.1) / 0.38));
+            for (let k = 1; k <= shelves; k++) {
+              const y = th + (H - 2 * th) * k / (shelves + 1);
+              bx(g, sec - 0.02, 0.016, D - 0.06, c, x0 + sec / 2, y, -0.01);
+              bx(g, sec * 0.7, 0.12, D * 0.5, clothes[(i + k) % clothes.length], x0 + sec / 2, y + 0.016, 0, { emissive: "#3a3326", emissiveIntensity: 0.25 });
+            }
+          }
+          // smoked glass door
+          const door = bx(g, sec - 0.006, H - 2 * th - 0.004, 0.006, "#15171b", x0 + sec / 2, th + 0.002, D / 2 - 0.003, { transparent: true, opacity: 0.42, roughness: 0.05, metalness: 0.4 });
+          door.castShadow = false;
+          bx(g, 0.012, Math.min(0.5, H * 0.25), 0.02, "#2a2c30", x0 + (i % 2 ? 0.03 : sec - 0.03), H * 0.45, D / 2 + 0.01, { metalness: 0.7, roughness: 0.3 });
+        }
         break;
       }
       case "petek": {
