@@ -1,4 +1,4 @@
-Bu projeye eklemeyi düşündüğüm 4 GitHub reposu var. Önce bu projeyi incele (README, klasör yapısı, kullanılan diller, bağımlılıklar, hangi AI kodlama aracıyla çalıştığımız), sonra her repoyu kendi linkinden açıp README'sini oku ve bu proje için işe yarayıp yaramayacağına karar ver.
+Bu projeye eklemeyi düşündüğüm 3 GitHub reposu var. Önce bu projeyi incele (README, klasör yapısı, kullanılan diller, bağımlılıklar, hangi AI kodlama aracıyla çalıştığımız), sonra her repoyu kendi linkinden açıp README'sini oku ve bu proje için işe yarayıp yaramayacağına karar ver.
 
 ## Repolar
 
@@ -13,11 +13,7 @@ Bu projeye eklemeyi düşündüğüm 4 GitHub reposu var. Önce bu projeyi incel
    "dsh" (DeepSeek Harness) adlı AI kodlama aracı için bir eklenti. Hesap ya da API anahtarı olmadan DeepSeek V4.1 Flash, Kimi K3 gibi modelleri ücretsiz kullandırıyor ve OpenAI uyumlu yerel bir port açıyor. İstekler üçüncü taraf ağ geçitlerinden geçiyor (OpenCode Zen ve Kilo AI).
    Bunu yalnızca dsh kullanıyorsak ya da bu projede ücretsiz, OpenAI uyumlu bir model ucuna gerçekten ihtiyaç varsa değerlendir. Gizli veya hassas kod içeren projelerde bu riski açıkça belirt.
 
-3. **nxnative** – https://github.com/seedds/nxnative
-   Nintendo Switch oyunlarını (kullanıcının kendi NSP dosyaları ve `prod.keys` anahtarıyla) iPhone, iPad ve Mac'te yerel çalışacak bir IPA dosyasına çeviriyor. macOS 26.6+, Xcode ve Python 3.12+ gerekiyor.
-   Bu bir geliştirme aracı değil. Yalnızca proje Switch, iOS oyun portlama, emülasyon veya Metal grafik konularıyla ilgiliyse işe yarar.
-
-4. **Elephant-Goldfish Model (EGM)** – https://github.com/google/elephant-goldfish-model
+3. **Elephant-Goldfish Model (EGM)** – https://github.com/google/elephant-goldfish-model
    Google'ın spec (tasarım dokümanı) odaklı geliştirme eklentisi. Bağlamı bilen bir ajan tasarımı yazıyor, sıfır bağlamla başlayan ajanlar da onu inceleyip kör noktaları buluyor. Komutlar: `egm-brainstorm`, `egm-draft`, `egm-review`.
    Kurulum:
    - Claude Code: `claude plugin marketplace add google/elephant-goldfish-model` ve ardından `claude plugin install egm@egm`
@@ -37,7 +33,6 @@ Değerlendirmede özellikle şunlara dikkat et:
 - **ub-mode:** crapper, dryer ve mutator projenin diliyle çalışıyor mu? Projede test altyapısı var mı?
 - **EGM:** Projede tasarım kararı gerektiren büyük özellikler var mı, yoksa çoğunlukla küçük düzeltmeler mi yapılıyor?
 - **dsh-our-free-model:** Bunu kullanırsak kodun ve verilerin hangi üçüncü taraflara gideceğini yaz.
-- **nxnative:** Projeyle doğrudan ilgisi yoksa tek cümleyle "KURMA" de.
 
 **Adım 2 – Onay:**
 Tablonun ardından "KUR" dediklerinin kurulum adımlarını sırasıyla yaz: hangi komut, hangi klasöre ne kopyalanacak, global mi yoksa proje bazında mı kurulacak. Sonra benim onayımı bekle.
@@ -48,4 +43,4 @@ Onayladıklarımı kur, çalıştığını doğrula (örneğin skill veya eklent
 Kurallar:
 - Sadece yukarıdaki resmi GitHub linklerinden kur. Benzer isimli kopya repo veya paket kullanma.
 - Benden onay almadan hiçbir şey kurma ve hiçbir dosyayı değiştirme.
-- Gizli bilgileri (API anahtarı, `.env` dosyası, `prod.keys` vb.) hiçbir yere gönderme ve commit'leme.
+- Gizli bilgileri (API anahtarı, `.env` dosyası vb.) hiçbir yere gönderme ve commit'leme.
